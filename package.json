@@ -5,8 +5,7 @@
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "eas build --profile development --platform android",
-    "ios": "eas build --profile development --platform ios",
+    "dev:apk": "eas build --profile development --platform android",
     "web": "expo start --web",
     "lint": "expo lint",
     "build:apk": "eas build --platform android --profile preview",
