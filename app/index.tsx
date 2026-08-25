@@ -17,8 +17,18 @@ import type { VideoFolder } from '@/types/video';
 import { formatTime } from '@/utils/formatTime';
 
 export default function LibraryScreen() {
-  const { videos, folders, videosForFolder, status, error, canAskAgain, requestAccess, rescan, deleteVideos } =
-    useVideoLibrary();
+  const {
+    videos,
+    folders,
+    videosForFolder,
+    status,
+    backgroundScanning,
+    error,
+    canAskAgain,
+    requestAccess,
+    rescan,
+    deleteVideos,
+  } = useVideoLibrary();
   const accentColor = useAccentColor();
   const router = useRouter();
   const [actionMenuFolder, setActionMenuFolder] = useState<VideoFolder | null>(null);
@@ -83,6 +93,9 @@ export default function LibraryScreen() {
       options={{
         headerRight: () => (
           <View style={styles.headerActions}>
+            {backgroundScanning ? (
+              <ActivityIndicator size="small" color={accentColor} />
+            ) : null}
             <Pressable onPress={() => router.push('/search')} hitSlop={12}>
               <Ionicons name="search-outline" size={22} color={accentColor} />
             </Pressable>

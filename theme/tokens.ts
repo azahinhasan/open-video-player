@@ -7,7 +7,9 @@
  */
 
 const palette = {
-  obsidian: '#0B0C0E',
+  // True AMOLED black — screen pixels turn fully off on OLED/AMOLED
+  // displays at this exact value, unlike a near-black like #0B0C0E.
+  obsidian: '#000000',
   surfaceDark: '#16181B',
   surfaceBorderDark: '#26292D',
   textPrimaryDark: '#EDEDEA',

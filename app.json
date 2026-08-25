@@ -11,7 +11,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0B0C0E",
-        "foregroundImage": "./assets/images/adaptive-icon-tomato-foreground.png"
+        "foregroundImage": "./assets/images/splash-icon-tomato-2048.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -30,6 +30,7 @@
         }
       ],
       "react-native-video",
+      "expo-notifications",
       [
         "expo-media-library",
         {

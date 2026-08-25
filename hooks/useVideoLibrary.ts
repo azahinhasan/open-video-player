@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import type { VideoAsset, VideoFolder } from '@/types/video';
 import { useLibraryPreferences } from '@/hooks/useLibraryPreferences';
 import { readMediaCache, writeMediaCache } from '@/utils/mediaCache';
+import { dismissScanNotification, showScanNotification } from '@/utils/scanNotification';
 
 export type LibraryStatus =
   | 'checking-permission'
@@ -81,12 +82,19 @@ type VideoLibraryStoreState = {
   videos: VideoAsset[];
   folderNames: Record<string, string>;
   status: LibraryStatus;
+  /**
+   * True while a scan is running silently (no full-screen spinner, no
+   * pull-refresh spinner) — currently just the automatic launch rescan when
+   * there's already cached content to browse. Screens can surface this as a
+   * small, non-blocking indicator instead of gating interaction on it.
+   */
+  backgroundScanning: boolean;
   error: string | null;
   canAskAgain: boolean;
   initialized: boolean;
   init: () => void;
   requestAccess: () => Promise<void>;
-  rescan: () => Promise<void>;
+  rescan: (options?: { silent?: boolean }) => Promise<void>;
   updateVideoMeta: (id: string, patch: Partial<Pick<VideoAsset, 'duration' | 'thumbnailUri'>>) => void;
   deleteVideos: (ids: string[]) => Promise<boolean>;
 };
@@ -95,6 +103,7 @@ const useVideoLibraryStore = create<VideoLibraryStoreState>((set, get) => ({
   videos: [],
   folderNames: {},
   status: 'checking-permission',
+  backgroundScanning: false,
   error: null,
   canAskAgain: true,
   initialized: false,
@@ -120,7 +129,11 @@ const useVideoLibraryStore = create<VideoLibraryStoreState>((set, get) => ({
       // scan regardless, otherwise there'd be nothing on screen to pull-to-refresh.
       const shouldAutoScan = useLibraryPreferences.getState().autoRefreshOnLaunch || cache.videos.length === 0;
       if (shouldAutoScan) {
-        await get().rescan();
+        // Silent when there's already something on screen to browse — the
+        // launch scan shouldn't block interaction or show a spinner the user
+        // didn't ask for. With nothing cached yet there's nothing else to
+        // show, so that first-ever scan still uses the normal blocking state.
+        await get().rescan({ silent: cache.videos.length > 0 });
       } else {
         set({ status: 'ready' });
       }
@@ -137,8 +150,17 @@ const useVideoLibraryStore = create<VideoLibraryStoreState>((set, get) => ({
     }
   },
 
-  rescan: async () => {
-    set({ status: 'scanning', error: null });
+  rescan: async (options) => {
+    const silent = options?.silent ?? false;
+    if (silent) {
+      set({ backgroundScanning: true, error: null });
+    } else {
+      set({ status: 'scanning', error: null });
+    }
+    // Only the silent/background path gets a system notification — a quick
+    // manual pull-to-refresh already has its own visible in-app spinner and
+    // doesn't need one too; this is for scans running without any other cue.
+    const notificationId = silent ? await showScanNotification() : null;
     try {
       const [assets, albums] = await Promise.all([
         fetchAllVideoAssets(),
@@ -156,12 +178,15 @@ const useVideoLibraryStore = create<VideoLibraryStoreState>((set, get) => ({
       }));
 
       writeMediaCache({ videos: nextVideos, folderNames: nextFolderNames });
-      set({ videos: nextVideos, folderNames: nextFolderNames, status: 'ready' });
+      set({ videos: nextVideos, folderNames: nextFolderNames, status: 'ready', backgroundScanning: false });
     } catch (e) {
       set({
         status: get().videos.length > 0 ? 'ready' : 'error',
+        backgroundScanning: false,
         error: e instanceof Error ? e.message : 'Could not scan your device for videos.',
       });
+    } finally {
+      await dismissScanNotification(notificationId);
     }
   },
 
@@ -195,6 +220,7 @@ export function useVideoLibrary() {
   const videos = useVideoLibraryStore((s) => s.videos);
   const folderNames = useVideoLibraryStore((s) => s.folderNames);
   const status = useVideoLibraryStore((s) => s.status);
+  const backgroundScanning = useVideoLibraryStore((s) => s.backgroundScanning);
   const error = useVideoLibraryStore((s) => s.error);
   const canAskAgain = useVideoLibraryStore((s) => s.canAskAgain);
   const init = useVideoLibraryStore((s) => s.init);
@@ -218,6 +244,7 @@ export function useVideoLibrary() {
     folders,
     videosForFolder,
     status,
+    backgroundScanning,
     error,
     canAskAgain,
     requestAccess,
