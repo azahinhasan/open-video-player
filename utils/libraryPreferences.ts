@@ -6,7 +6,7 @@ export type LibraryPreferences = {
   autoRefreshOnLaunch: boolean;
 };
 
-const DEFAULT_PREFERENCE: LibraryPreferences = { autoRefreshOnLaunch: true };
+const DEFAULT_PREFERENCE: LibraryPreferences = { autoRefreshOnLaunch: false };
 
 function preferenceFile(): File {
   return new File(Paths.document, PREFERENCE_FILE_NAME);

@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { ActionMenu, type ActionMenuOption } from '@/components/library/ActionMenu';
+import { DeleteConfirmSheet } from '@/components/library/DeleteConfirmSheet';
 import { PropertiesSheet, type PropertyRow } from '@/components/library/PropertiesSheet';
 import { SortControl } from '@/components/library/SortControl';
 import { VideoGridItem } from '@/components/library/VideoGridItem';
@@ -51,6 +52,8 @@ export default function FolderScreen() {
   const router = useRouter();
   const [actionMenuVideo, setActionMenuVideo] = useState<VideoAsset | null>(null);
   const [propertiesVideo, setPropertiesVideo] = useState<VideoAsset | null>(null);
+  const [deleteVideo, setDeleteVideo] = useState<VideoAsset | null>(null);
+  const [batchDeleteVisible, setBatchDeleteVisible] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -92,51 +95,31 @@ export default function FolderScreen() {
     setSelectedIds(allSelected ? new Set() : new Set(videos.map((v) => v.id)));
   }, [allSelected, videos]);
 
-  const handleDelete = useCallback(
-    (video: VideoAsset) => {
-      Alert.alert('Delete video?', `"${video.filename}" will be permanently deleted.`, [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            const success = await deleteVideos([video.id]);
-            if (!success) {
-              Alert.alert("Couldn't delete", 'The video was not deleted. Please try again.');
-            }
-          },
-        },
-      ]);
-    },
-    [deleteVideos]
-  );
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteVideo) {
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setDeleteVideo(null);
+    const success = await deleteVideos([deleteVideo.id]);
+    if (!success) {
+      Alert.alert("Couldn't delete", 'The video was not deleted. Please try again.');
+    }
+  }, [deleteVideo, deleteVideos]);
 
-  const handleBatchDelete = useCallback(() => {
+  const handleConfirmBatchDelete = useCallback(async () => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) {
       return;
     }
-    Alert.alert(
-      `Delete ${ids.length} video${ids.length === 1 ? '' : 's'}?`,
-      'This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            const success = await deleteVideos(ids);
-            if (success) {
-              exitSelectMode();
-            } else {
-              Alert.alert("Couldn't delete", 'Some videos were not deleted. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setBatchDeleteVisible(false);
+    const success = await deleteVideos(ids);
+    if (success) {
+      exitSelectMode();
+    } else {
+      Alert.alert("Couldn't delete", 'Some videos were not deleted. Please try again.');
+    }
   }, [selectedIds, deleteVideos, exitSelectMode]);
 
   const actionMenuOptions: ActionMenuOption[] = actionMenuVideo
@@ -158,7 +141,7 @@ export default function FolderScreen() {
           label: 'Delete',
           icon: 'trash-outline',
           destructive: true,
-          onPress: () => handleDelete(actionMenuVideo),
+          onPress: () => setDeleteVideo(actionMenuVideo),
         },
       ]
     : [];
@@ -189,6 +172,11 @@ export default function FolderScreen() {
     ];
   }, [propertiesVideo, folder]);
 
+  const batchDeleteFirstVideo = useMemo(
+    () => videos.find((v) => selectedIds.has(v.id)) ?? null,
+    [videos, selectedIds]
+  );
+
   return (
     <ThemedView style={styles.container}>
       <Stack.Screen
@@ -211,7 +199,10 @@ export default function FolderScreen() {
                     color={accentColor}
                   />
                 </Pressable>
-                <Pressable onPress={handleBatchDelete} hitSlop={12} disabled={selectedIds.size === 0}>
+                <Pressable
+                  onPress={() => setBatchDeleteVisible(true)}
+                  hitSlop={12}
+                  disabled={selectedIds.size === 0}>
                   <Ionicons
                     name="trash-outline"
                     size={22}
@@ -287,6 +278,27 @@ export default function FolderScreen() {
         title="Video properties"
         rows={propertyRows}
         onClose={() => setPropertiesVideo(null)}
+      />
+
+      <DeleteConfirmSheet
+        visible={deleteVideo !== null}
+        title={deleteVideo?.filename ?? ''}
+        thumbnailUri={deleteVideo?.thumbnailUri}
+        onCancel={() => setDeleteVideo(null)}
+        onConfirm={handleConfirmDelete}
+      />
+
+      <DeleteConfirmSheet
+        visible={batchDeleteVisible}
+        title={`${selectedIds.size} video${selectedIds.size === 1 ? '' : 's'} selected`}
+        subtitle={
+          selectedIds.size > 1 && batchDeleteFirstVideo
+            ? `${batchDeleteFirstVideo.filename} and ${selectedIds.size - 1} more`
+            : (batchDeleteFirstVideo?.filename ?? undefined)
+        }
+        thumbnailUri={batchDeleteFirstVideo?.thumbnailUri}
+        onCancel={() => setBatchDeleteVisible(false)}
+        onConfirm={handleConfirmBatchDelete}
       />
     </ThemedView>
   );

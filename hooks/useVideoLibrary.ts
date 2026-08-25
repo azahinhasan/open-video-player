@@ -91,12 +91,10 @@ type VideoLibraryStoreState = {
   deleteVideos: (ids: string[]) => Promise<boolean>;
 };
 
-const initialCache = readMediaCache();
-
 const useVideoLibraryStore = create<VideoLibraryStoreState>((set, get) => ({
-  videos: initialCache.videos,
-  folderNames: initialCache.folderNames,
-  status: initialCache.videos.length > 0 ? 'ready' : 'checking-permission',
+  videos: [],
+  folderNames: {},
+  status: 'checking-permission',
   error: null,
   canAskAgain: true,
   initialized: false,
@@ -107,8 +105,12 @@ const useVideoLibraryStore = create<VideoLibraryStoreState>((set, get) => ({
     }
     set({ initialized: true });
     (async () => {
-      const existing = await MediaLibrary.getPermissionsAsync(false, ['video']);
-      set({ canAskAgain: existing.canAskAgain });
+      const [cache, existing] = await Promise.all([
+        readMediaCache(),
+        MediaLibrary.getPermissionsAsync(false, ['video']),
+      ]);
+      set({ canAskAgain: existing.canAskAgain, videos: cache.videos, folderNames: cache.folderNames });
+
       if (!(existing.granted || existing.accessPrivileges === 'limited')) {
         set({ status: 'needs-permission' });
         return;
@@ -116,7 +118,7 @@ const useVideoLibraryStore = create<VideoLibraryStoreState>((set, get) => ({
       // Skip the automatic launch scan when the user has disabled it and we
       // already have cached videos to show — an empty cache still needs a
       // scan regardless, otherwise there'd be nothing on screen to pull-to-refresh.
-      const shouldAutoScan = useLibraryPreferences.getState().autoRefreshOnLaunch || get().videos.length === 0;
+      const shouldAutoScan = useLibraryPreferences.getState().autoRefreshOnLaunch || cache.videos.length === 0;
       if (shouldAutoScan) {
         await get().rescan();
       } else {

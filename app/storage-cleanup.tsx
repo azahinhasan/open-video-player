@@ -4,6 +4,7 @@ import { Image } from "expo-image";
 import { useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, View } from "react-native";
 
+import { DeleteConfirmSheet } from "@/components/library/DeleteConfirmSheet";
 import { SegmentedControl } from "@/components/settings/SegmentedControl";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -33,6 +34,7 @@ export default function StorageCleanupScreen() {
   const mutedColor = useThemeColor({}, "textMuted");
   const dangerColor = useThemeColor({}, "danger");
   const [tab, setTab] = useState<CleanupTab>("largest");
+  const [deleteVideo, setDeleteVideo] = useState<SizedVideo | null>(null);
 
   const sized = useMemo<SizedVideo[]>(
     () => videos.map((video) => ({ ...video, size: getFileSize(video.uri) })),
@@ -56,30 +58,19 @@ export default function StorageCleanupScreen() {
     return copy.slice(0, 30);
   }, [sized, tab]);
 
-  const handleDelete = (video: SizedVideo) => {
-    Alert.alert(
-      "Delete video?",
-      `"${video.filename}" will be permanently deleted.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
-              () => {},
-            );
-            const success = await deleteVideos([video.id]);
-            if (!success) {
-              Alert.alert(
-                "Couldn't delete",
-                "The video was not deleted. Please try again.",
-              );
-            }
-          },
-        },
-      ],
-    );
+  const handleConfirmDelete = async () => {
+    if (!deleteVideo) {
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setDeleteVideo(null);
+    const success = await deleteVideos([deleteVideo.id]);
+    if (!success) {
+      Alert.alert(
+        "Couldn't delete",
+        "The video was not deleted. Please try again.",
+      );
+    }
   };
 
   return (
@@ -131,11 +122,19 @@ export default function StorageCleanupScreen() {
                   : `${formatDate(item.creationTime)} · ${item.size !== null ? formatFileSize(item.size) : "Unknown size"}`}
               </ThemedText>
             </View>
-            <Pressable style={styles.deleteButton} onPress={() => handleDelete(item)} hitSlop={10}>
+            <Pressable style={styles.deleteButton} onPress={() => setDeleteVideo(item)} hitSlop={10}>
               <Ionicons name="trash-outline" size={20} color={dangerColor} />
             </Pressable>
           </View>
         )}
+      />
+
+      <DeleteConfirmSheet
+        visible={deleteVideo !== null}
+        title={deleteVideo?.filename ?? ""}
+        thumbnailUri={deleteVideo?.thumbnailUri}
+        onCancel={() => setDeleteVideo(null)}
+        onConfirm={handleConfirmDelete}
       />
     </ThemedView>
   );

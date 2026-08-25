@@ -1,42 +1,32 @@
 {
   "expo": {
-    "name": "video-player-app-mobile",
+    "name": "Open Video Player",
     "slug": "video-player-app",
     "version": "0.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/icon-1024.png",
+    "icon": "./assets/images/icon-tomato-final-1024.png",
     "scheme": "videoplayerappmobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true
-    },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#14171a",
-        "foregroundImage": "./assets/images/adaptive-icon-foreground.png"
+        "backgroundColor": "#0B0C0E",
+        "foregroundImage": "./assets/images/adaptive-icon-tomato-foreground.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.azahinhasan.videoplayerappmobile",
       "permissions": []
     },
-    "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/splash-icon-tomato-2048.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
+          "backgroundColor": "#0B0C0E"
         }
       ],
       "react-native-video",

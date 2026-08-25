@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { ActionMenu, type ActionMenuOption } from '@/components/library/ActionMenu';
+import { DeleteConfirmSheet } from '@/components/library/DeleteConfirmSheet';
 import { FolderListItem } from '@/components/library/FolderListItem';
 import { PermissionGate } from '@/components/library/PermissionGate';
 import { PropertiesSheet, type PropertyRow } from '@/components/library/PropertiesSheet';
@@ -22,6 +23,7 @@ export default function LibraryScreen() {
   const router = useRouter();
   const [actionMenuFolder, setActionMenuFolder] = useState<VideoFolder | null>(null);
   const [propertiesFolder, setPropertiesFolder] = useState<VideoFolder | null>(null);
+  const [deleteFolder, setDeleteFolder] = useState<VideoFolder | null>(null);
 
   const handleOpenFolder = useCallback(
     (folder: VideoFolder) => {
@@ -30,30 +32,18 @@ export default function LibraryScreen() {
     [router]
   );
 
-  const handleDeleteFolder = useCallback(
-    (folder: VideoFolder) => {
-      const folderVideos = videosForFolder(folder.id);
-      Alert.alert(
-        'Delete folder?',
-        `All ${folderVideos.length} video${folderVideos.length === 1 ? '' : 's'} in "${folder.name}" will be permanently deleted.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete all',
-            style: 'destructive',
-            onPress: async () => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-              const success = await deleteVideos(folderVideos.map((v) => v.id));
-              if (!success) {
-                Alert.alert("Couldn't delete", 'The folder was not fully deleted. Please try again.');
-              }
-            },
-          },
-        ]
-      );
-    },
-    [videosForFolder, deleteVideos]
-  );
+  const handleConfirmDeleteFolder = useCallback(async () => {
+    if (!deleteFolder) {
+      return;
+    }
+    const folderVideos = videosForFolder(deleteFolder.id);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setDeleteFolder(null);
+    const success = await deleteVideos(folderVideos.map((v) => v.id));
+    if (!success) {
+      Alert.alert("Couldn't delete", 'The folder was not fully deleted. Please try again.');
+    }
+  }, [deleteFolder, videosForFolder, deleteVideos]);
 
   const actionMenuOptions: ActionMenuOption[] = actionMenuFolder
     ? [
@@ -68,10 +58,12 @@ export default function LibraryScreen() {
           label: 'Delete all videos',
           icon: 'trash-outline',
           destructive: true,
-          onPress: () => handleDeleteFolder(actionMenuFolder),
+          onPress: () => setDeleteFolder(actionMenuFolder),
         },
       ]
     : [];
+
+  const deleteFolderVideoCount = deleteFolder ? videosForFolder(deleteFolder.id).length : 0;
 
   const propertyRows: PropertyRow[] = useMemo(() => {
     if (!propertiesFolder) {
@@ -162,6 +154,16 @@ export default function LibraryScreen() {
         title="Folder properties"
         rows={propertyRows}
         onClose={() => setPropertiesFolder(null)}
+      />
+
+      <DeleteConfirmSheet
+        visible={deleteFolder !== null}
+        title={deleteFolder?.name ?? ''}
+        subtitle={`${deleteFolderVideoCount} video${deleteFolderVideoCount === 1 ? '' : 's'}`}
+        thumbnailUri={deleteFolder?.thumbnailUri}
+        confirmLabel="Delete all"
+        onCancel={() => setDeleteFolder(null)}
+        onConfirm={handleConfirmDeleteFolder}
       />
     </ThemedView>
   );

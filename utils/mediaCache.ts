@@ -20,13 +20,21 @@ function isVideoAsset(value: unknown): value is VideoAsset {
   return !!v && typeof v.id === 'string' && typeof v.uri === 'string' && typeof v.folderId === 'string';
 }
 
-export function readMediaCache(): MediaCache {
+/**
+ * Async on purpose — the library's full metadata (every video's uri,
+ * filename, thumbnail path, etc.) can grow into a sizeable file for a large
+ * library, and reading it synchronously at module-load time blocked the JS
+ * thread before the first frame could render, keeping the native splash
+ * screen up longer than it should. Callers read this inside an effect
+ * (after mount) instead of at import time.
+ */
+export async function readMediaCache(): Promise<MediaCache> {
   try {
     const file = cacheFile();
     if (!file.exists) {
       return { ...EMPTY_CACHE };
     }
-    const parsed = JSON.parse(file.textSync());
+    const parsed = JSON.parse(await file.text());
     const videos = Array.isArray(parsed?.videos) ? parsed.videos.filter(isVideoAsset) : [];
     const folderNames =
       parsed?.folderNames && typeof parsed.folderNames === 'object' ? parsed.folderNames : {};
