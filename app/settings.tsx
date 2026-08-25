@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AccentSwatch } from '@/components/settings/AccentSwatch';
 import { CustomColorSheet } from '@/components/settings/CustomColorSheet';
@@ -15,12 +16,17 @@ import { usePlaybackPreferences } from '@/hooks/usePlaybackPreferences';
 import { useAccentColor, useThemePreference } from '@/hooks/useThemePreference';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { radius, spacing, typography } from '@/theme/tokens';
-import type { ResumeBehavior } from '@/utils/playbackPreferences';
+import type { ControlsLayout, ResumeBehavior } from '@/utils/playbackPreferences';
 import type { ThemeMode } from '@/utils/themePreference';
 
 const RESUME_OPTIONS: { value: ResumeBehavior; label: string }[] = [
   { value: 'resume', label: 'Resume' },
   { value: 'restart', label: 'Restart' },
+];
+
+const CONTROLS_LAYOUT_OPTIONS: { value: ControlsLayout; label: string }[] = [
+  { value: 'center', label: 'Center' },
+  { value: 'bottom', label: 'Below bar' },
 ];
 
 const MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
@@ -77,6 +83,7 @@ function CustomAccentButton({
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const mode = useThemePreference((s) => s.mode);
   const setMode = useThemePreference((s) => s.setMode);
   const accent = useThemePreference((s) => s.accent);
@@ -90,6 +97,8 @@ export default function SettingsScreen() {
   const setResumeBehavior = usePlaybackPreferences((s) => s.setResumeBehavior);
   const autoPlayNext = usePlaybackPreferences((s) => s.autoPlayNext);
   const setAutoPlayNext = usePlaybackPreferences((s) => s.setAutoPlayNext);
+  const controlsLayout = usePlaybackPreferences((s) => s.controlsLayout);
+  const setControlsLayout = usePlaybackPreferences((s) => s.setControlsLayout);
 
   const autoRefreshOnLaunch = useLibraryPreferences((s) => s.autoRefreshOnLaunch);
   const setAutoRefreshOnLaunch = useLibraryPreferences((s) => s.setAutoRefreshOnLaunch);
@@ -98,6 +107,9 @@ export default function SettingsScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + spacing.xl }]}
+        showsVerticalScrollIndicator={false}>
       <SectionHeader title="Library" />
       <Card>
         <View style={styles.row}>
@@ -131,6 +143,17 @@ export default function SettingsScreen() {
             onValueChange={setAutoPlayNext}
             trackColor={{ false: 'rgba(128,128,128,0.3)', true: accentColor }}
             thumbColor="#fff"
+          />
+        </View>
+
+        <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
+
+        <View style={styles.controlBlock}>
+          <ThemedText style={styles.controlLabel}>Player button position</ThemedText>
+          <SegmentedControl
+            options={CONTROLS_LAYOUT_OPTIONS}
+            value={controlsLayout}
+            onChange={setControlsLayout}
           />
         </View>
       </Card>
@@ -172,6 +195,7 @@ export default function SettingsScreen() {
           <Ionicons name="chevron-forward" size={18} color={mutedColor} />
         </Pressable>
       </Card>
+      </ScrollView>
 
       <CustomColorSheet
         visible={colorSheetVisible}
@@ -189,6 +213,8 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollContent: {
     paddingTop: spacing.lg,
   },
   sectionHeader: {

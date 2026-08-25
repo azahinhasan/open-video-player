@@ -13,6 +13,8 @@ import Animated, {
   type DerivedValue,
 } from 'react-native-reanimated';
 
+import { useAccentColor } from '@/hooks/useThemePreference';
+import { playerColors } from '@/theme/tokens';
 import { getChapters, type Chapter } from '@/utils/chapters';
 import { formatTime } from '@/utils/formatTime';
 import { generateChapterThumbnail } from '@/utils/thumbnailCache';
@@ -39,6 +41,7 @@ export function ChapterRail({
   onScrubEnd,
 }: ChapterRailProps) {
   const chapters = useMemo(() => getChapters(duration), [duration]);
+  const accentColor = useAccentColor();
 
   const railWidth = useSharedValue(0);
   const progressFraction = useSharedValue(0);
@@ -57,6 +60,10 @@ export function ChapterRail({
   const displayFraction = useDerivedValue(() =>
     isDragging.value ? dragFraction.value : progressFraction.value
   );
+
+  const triggerSegmentHaptic = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+  }, []);
 
   useAnimatedReaction(
     () => Math.floor(dragFraction.value * duration),
@@ -126,10 +133,6 @@ export function ChapterRail({
     [duration, onSeek]
   );
 
-  const triggerSegmentHaptic = useCallback(() => {
-    Haptics.selectionAsync().catch(() => {});
-  }, []);
-
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
@@ -192,7 +195,12 @@ export function ChapterRail({
 
           <View style={styles.rail}>
             {chapters.map((chapter) => (
-              <ChapterSegment key={chapter.index} chapter={chapter} displayFraction={displayFraction} />
+              <ChapterSegment
+                key={chapter.index}
+                chapter={chapter}
+                displayFraction={displayFraction}
+                accentColor={accentColor}
+              />
             ))}
           </View>
           {buffering ? (
@@ -207,9 +215,11 @@ export function ChapterRail({
 function ChapterSegment({
   chapter,
   displayFraction,
+  accentColor,
 }: {
   chapter: Chapter;
   displayFraction: DerivedValue<number>;
+  accentColor: string;
 }) {
   const fillStyle = useAnimatedStyle(() => {
     const frac = displayFraction.value;
@@ -219,13 +229,23 @@ function ChapterSegment({
     } else if (frac > chapter.startFraction) {
       filled = (frac - chapter.startFraction) / (chapter.endFraction - chapter.startFraction);
     }
-    return { width: `${filled * 100}%` };
+    const isCurrent = frac >= chapter.startFraction && frac < chapter.endFraction;
+    return {
+      width: `${filled * 100}%`,
+      backgroundColor: isCurrent ? accentColor : playerColors.chapterWatched,
+    };
   });
 
   const trackStyle = useAnimatedStyle(() => {
     const frac = displayFraction.value;
     const isCurrent = frac >= chapter.startFraction && frac < chapter.endFraction;
-    return { opacity: isCurrent ? 1 : 0.5 };
+    const isUpcoming = frac < chapter.startFraction;
+    return {
+      opacity: isCurrent ? 1 : 0.85,
+      backgroundColor: isUpcoming ? 'transparent' : playerColors.chapterWatched,
+      borderColor: playerColors.chapterUpcoming,
+      borderWidth: isUpcoming ? 1 : 0,
+    };
   });
 
   return (
@@ -252,12 +272,10 @@ const styles = StyleSheet.create({
     flex: 1,
     height: '100%',
     borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.3)',
     overflow: 'hidden',
   },
   segmentFill: {
     height: '100%',
-    backgroundColor: '#fff',
     borderRadius: 3,
   },
   bufferingDot: {

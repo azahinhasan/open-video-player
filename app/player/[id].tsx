@@ -5,6 +5,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSharedValue } from 'react-native-reanimated';
 import type {
   OnBufferData,
   OnLoadData,
@@ -12,6 +13,7 @@ import type {
   OnVideoErrorData,
   VideoRef,
 } from 'react-native-video';
+import { VolumeManager } from 'react-native-volume-manager';
 
 import { ControlsOverlay } from '@/components/player/ControlsOverlay';
 import { GestureLayer } from '@/components/player/GestureLayer';
@@ -27,8 +29,11 @@ const AUTO_HIDE_DELAY_MS = 3000;
 const ZOOM_CYCLE: VideoZoomMode[] = ['contain', 'cover', 'stretch'];
 // Generously covers the Chapter Rail's touch area plus the time row beneath
 // it, so GestureLayer's full-screen zones don't compete with the rail's own
-// gesture for taps while the bottom bar is actually on screen.
-const BOTTOM_CONTROLS_TOUCH_HEIGHT = 110;
+// gesture for taps while the bottom bar is actually on screen. When the
+// transport buttons also live down there (controlsLayout: 'bottom'), the
+// zone needs to grow to cover that extra row too, for the same reason.
+const BOTTOM_CONTROLS_TOUCH_HEIGHT_CENTER = 110;
+const BOTTOM_CONTROLS_TOUCH_HEIGHT_WITH_TRANSPORT = 190;
 
 export default function PlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -44,6 +49,9 @@ export default function PlayerScreen() {
   const videoRef = useRef<VideoRef>(null);
   const accentColor = useAccentColor();
   const resumeBehavior = usePlaybackPreferences((s) => s.resumeBehavior);
+  const controlsLayout = usePlaybackPreferences((s) => s.controlsLayout);
+  const bottomControlsTouchHeight =
+    controlsLayout === 'bottom' ? BOTTOM_CONTROLS_TOUCH_HEIGHT_WITH_TRANSPORT : BOTTOM_CONTROLS_TOUCH_HEIGHT_CENTER;
 
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -57,6 +65,41 @@ export default function PlayerScreen() {
   const [zoomMode, setZoomMode] = useState<VideoZoomMode>('contain');
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Single source of truth for media volume, shared between GestureLayer's
+  // swipe gesture and the mute button — both read/write this same value so
+  // muting always reflects immediately everywhere, instead of each side
+  // caching its own copy and waiting on a native "volume changed" event that
+  // never actually echoes back for changes the app itself triggered.
+  const volumeLevel = useSharedValue(0.5);
+
+  useEffect(() => {
+    VolumeManager.getVolume()
+      .then((result) => {
+        volumeLevel.value = result.volume;
+      })
+      .catch(() => {});
+    // The native event also fires for non-media streams (ring, notification,
+    // alarm, system, call) — ignore anything that isn't the music stream, or
+    // it'll get treated as if playback volume itself changed.
+    const subscription = VolumeManager.addVolumeListener((result) => {
+      if (result.type && result.type !== 'music') {
+        return;
+      }
+      volumeLevel.value = result.volume;
+    });
+    return () => subscription.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setVolume = useCallback(
+    (value: number) => {
+      const clamped = Math.min(1, Math.max(0, value));
+      volumeLevel.value = clamped;
+      VolumeManager.setVolume(clamped, { showUI: false, playSound: false }).catch(() => {});
+    },
+    [volumeLevel]
+  );
 
   // Refs mirror the latest video/time/duration so the unmount cleanup and
   // AppState listener below can read fresh values without depending on them
@@ -318,6 +361,7 @@ export default function PlayerScreen() {
               <GestureLayer
                 currentTime={currentTime}
                 duration={duration}
+                volumeLevel={volumeLevel}
                 onSeekBy={(delta) => {
                   seekBy(delta);
                   showControls();
@@ -327,7 +371,7 @@ export default function PlayerScreen() {
                   showControls();
                 }}
                 onToggleControls={toggleControls}
-                bottomInset={controlsVisible ? BOTTOM_CONTROLS_TOUCH_HEIGHT : 0}
+                bottomInset={controlsVisible ? bottomControlsTouchHeight : 0}
               />
 
               <ControlsOverlay
@@ -346,11 +390,12 @@ export default function PlayerScreen() {
                 onRateChange={setRate}
                 loop={loop}
                 onToggleLoop={() => setLoop((v) => !v)}
-                zoomMode={zoomMode}
                 onCycleZoomMode={handleCycleZoomMode}
                 hasSubtitle={video.subtitleUri !== null}
                 subtitlesEnabled={subtitlesEnabled}
                 onToggleSubtitles={() => setSubtitlesEnabled((v) => !v)}
+                volumeLevel={volumeLevel}
+                onSetVolume={setVolume}
                 onBack={handleBack}
                 onLock={() => setLocked(true)}
                 onTogglePlayPause={handleTogglePlayPause}

@@ -1,16 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { VideoZoomMode } from '@/components/player/VideoPlayer';
 import { useAccentColor } from '@/hooks/useThemePreference';
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
-
-const ZOOM_LABELS: Record<VideoZoomMode, string> = {
-  contain: 'Fit',
-  cover: 'Fill',
-  stretch: 'Stretch',
-};
 
 type MoreOptionsMenuProps = {
   visible: boolean;
@@ -19,11 +12,10 @@ type MoreOptionsMenuProps = {
   onRateChange: (rate: number) => void;
   loop: boolean;
   onToggleLoop: () => void;
-  zoomMode: VideoZoomMode;
-  onCycleZoomMode: () => void;
   hasSubtitle: boolean;
   subtitlesEnabled: boolean;
   onToggleSubtitles: () => void;
+  onLock: () => void;
   topOffset: number;
   rightOffset: number;
 };
@@ -35,11 +27,10 @@ export function MoreOptionsMenu({
   onRateChange,
   loop,
   onToggleLoop,
-  zoomMode,
-  onCycleZoomMode,
   hasSubtitle,
   subtitlesEnabled,
   onToggleSubtitles,
+  onLock,
   topOffset,
   rightOffset,
 }: MoreOptionsMenuProps) {
@@ -77,13 +68,6 @@ export function MoreOptionsMenu({
           <Ionicons name={loop ? 'checkbox' : 'square-outline'} size={18} color="#fff" />
         </Pressable>
 
-        <Pressable style={styles.row} onPress={onCycleZoomMode}>
-          <Ionicons name="scan-outline" size={18} color="#fff" />
-          <Text style={styles.rowText}>Aspect ratio</Text>
-          <View style={styles.rowSpacer} />
-          <Text style={styles.rowValue}>{ZOOM_LABELS[zoomMode]}</Text>
-        </Pressable>
-
         {hasSubtitle ? (
           <Pressable style={styles.row} onPress={onToggleSubtitles}>
             <Ionicons name="chatbox-outline" size={18} color="#fff" />
@@ -92,6 +76,18 @@ export function MoreOptionsMenu({
             <Ionicons name={subtitlesEnabled ? 'checkbox' : 'square-outline'} size={18} color="#fff" />
           </Pressable>
         ) : null}
+
+        <View style={styles.divider} />
+
+        <Pressable
+          style={styles.row}
+          onPress={() => {
+            onClose();
+            onLock();
+          }}>
+          <Ionicons name="lock-closed-outline" size={18} color="#fff" />
+          <Text style={styles.rowText}>Lock screen</Text>
+        </Pressable>
       </View>
     </>
   );
@@ -135,6 +131,11 @@ const styles = StyleSheet.create({
   speedChipTextActive: {
     fontWeight: '700',
   },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    marginVertical: 6,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -147,9 +148,5 @@ const styles = StyleSheet.create({
   },
   rowSpacer: {
     flex: 1,
-  },
-  rowValue: {
-    color: '#aaa',
-    fontSize: 12,
   },
 });

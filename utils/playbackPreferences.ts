@@ -4,14 +4,19 @@ const PREFERENCE_FILE_NAME = 'playback-preference.json';
 
 export type ResumeBehavior = 'resume' | 'restart';
 
+/** Where the transport buttons (prev/skip/play-pause/skip/next) render on the player screen. */
+export type ControlsLayout = 'center' | 'bottom';
+
 export type PlaybackPreferences = {
   resumeBehavior: ResumeBehavior;
   autoPlayNext: boolean;
+  controlsLayout: ControlsLayout;
 };
 
 const DEFAULT_PREFERENCES: PlaybackPreferences = {
   resumeBehavior: 'resume',
   autoPlayNext: true,
+  controlsLayout: 'center',
 };
 
 function preferenceFile(): File {
@@ -28,6 +33,7 @@ export function readPlaybackPreferences(): PlaybackPreferences {
     return {
       resumeBehavior: parsed?.resumeBehavior === 'restart' ? 'restart' : 'resume',
       autoPlayNext: typeof parsed?.autoPlayNext === 'boolean' ? parsed.autoPlayNext : true,
+      controlsLayout: parsed?.controlsLayout === 'bottom' ? 'bottom' : 'center',
     };
   } catch {
     return { ...DEFAULT_PREFERENCES };

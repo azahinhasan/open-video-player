@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useThemeColor } from '@/hooks/use-theme-color';
+
 export type ActionMenuOption = {
   key: string;
   label: string;
@@ -18,6 +20,7 @@ type ActionMenuProps = {
 };
 
 export function ActionMenu({ visible, title, subtitle, options, onClose }: ActionMenuProps) {
+  const dangerColor = useThemeColor({}, 'danger');
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -42,9 +45,13 @@ export function ActionMenu({ visible, title, subtitle, options, onClose }: Actio
               <Ionicons
                 name={option.icon}
                 size={20}
-                color={option.destructive ? '#e74c3c' : '#fff'}
+                color={option.destructive ? dangerColor : '#fff'}
               />
-              <Text style={[styles.rowLabel, option.destructive ? styles.destructiveLabel : null]}>
+              <Text
+                style={[
+                  styles.rowLabel,
+                  option.destructive ? [styles.destructiveLabel, { color: dangerColor }] : null,
+                ]}>
                 {option.label}
               </Text>
             </Pressable>
@@ -95,6 +102,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   destructiveLabel: {
-    color: '#e74c3c',
+    fontWeight: '500',
   },
 });

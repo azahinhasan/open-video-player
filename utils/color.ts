@@ -42,3 +42,23 @@ export function hexToHsl(hex: string): { h: number; s: number; l: number } {
   }
   return { h: Math.round(h), s: Math.round(s * 100), l: Math.round(l * 100) };
 }
+
+/**
+ * Slightly lighter/more saturated variant of an accent color, for a
+ * pressed/active state. Calibrated to match the Tomato Rail spec's literal
+ * accentHover (#E64536 -> #F0523F) so it generalizes to any chosen accent.
+ */
+export function accentHoverColor(hex: string): string {
+  const { h, s, l } = hexToHsl(hex);
+  return hslToHex(h, Math.min(100, s + 8), Math.min(100, l + 4));
+}
+
+/**
+ * Very dark, low-lightness tint of an accent color, for backgrounds behind
+ * accent-colored text/badges (e.g. a selected chip fill). Calibrated to
+ * match the Tomato Rail spec's literal accentMuted (#E64536 -> #3A1712).
+ */
+export function accentMutedColor(hex: string): string {
+  const { h, s } = hexToHsl(hex);
+  return hslToHex(h, Math.max(0, s - 25), 15);
+}

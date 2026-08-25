@@ -1,9 +1,9 @@
 /**
- * Design system source of truth ("Obsidian Rail"). Colors, spacing, radius,
- * typography and motion durations live here — screens should consume these
- * tokens (directly or via constants/theme.ts, which re-exports the color
- * portion for the existing ThemedText/ThemedView plumbing) rather than
- * hardcoding values locally.
+ * Design system source of truth ("Obsidian Rail" neutrals + "Tomato Rail"
+ * accent layer). Colors, spacing, radius, typography and motion durations
+ * live here — screens should consume these tokens (directly or via
+ * constants/theme.ts, which re-exports the color portion for the existing
+ * ThemedText/ThemedView plumbing) rather than hardcoding values locally.
  */
 
 const palette = {
@@ -21,11 +21,31 @@ const palette = {
   textSecondaryLight: '#5C5F63',
   textMutedLight: '#9A9D9F',
 
-  coral: '#E2603A',
-  teal: '#1D9E75',
-  amber: '#BA7517',
-  violet: '#7F77DD',
-  danger: '#E5484D',
+  // Tomato Rail — the default accent. A deepened version of pure tomato
+  // (#FF6347) so it holds contrast for text/icons on top of it; pure tomato
+  // is reserved for the icon/marketing gradient, never used flat in UI.
+  tomato: '#E64536',
+  tomatoMuted: '#3A1712',
+  tomatoHover: '#F0523F',
+
+  blue: '#3B82F6',
+  green: '#22C55E',
+  purple: '#A855F7',
+
+  secondaryCyan: '#22D3EE',
+  secondaryBlue: '#3B82F6',
+
+  // Kept deliberately separate from the accent so delete actions never
+  // visually blend into normal accent UI, regardless of chosen accent.
+  danger: '#E24B4A',
+  dangerHover: '#F0605F',
+} as const;
+
+// Player overlay is always dark regardless of app theme (video content is
+// conventionally framed in a dark surface), so these don't split by light/dark.
+export const playerColors = {
+  chapterWatched: '#4A4A46',
+  chapterUpcoming: '#3A3A38',
 } as const;
 
 export const themeColors = {
@@ -52,20 +72,38 @@ export const themeColors = {
 } as const;
 
 export const accentPalette = {
-  coral: palette.coral,
-  teal: palette.teal,
-  amber: palette.amber,
-  violet: palette.violet,
+  tomato: palette.tomato,
+  blue: palette.blue,
+  green: palette.green,
+  purple: palette.purple,
 } as const;
 
 export type AccentKey = keyof typeof accentPalette;
 
 export const accentLabels: Record<AccentKey, string> = {
-  coral: 'Coral',
-  teal: 'Teal',
-  amber: 'Amber',
-  violet: 'Violet',
+  tomato: 'Tomato',
+  blue: 'Blue',
+  green: 'Green',
+  purple: 'Purple',
 };
+
+// Fixed hover/muted variants for the default Tomato accent (selected-chip
+// fill, pressed states). For non-default accents these are derived at
+// runtime via utils/color.ts's accentHoverColor/accentMutedColor instead.
+export const tomatoAccentExtras = {
+  muted: palette.tomatoMuted,
+  hover: palette.tomatoHover,
+} as const;
+
+export const secondaryColors = {
+  cyan: palette.secondaryCyan,
+  blue: palette.secondaryBlue,
+} as const;
+
+export const dangerColors = {
+  base: palette.danger,
+  hover: palette.dangerHover,
+} as const;
 
 export const spacing = {
   xs: 4,

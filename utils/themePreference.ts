@@ -12,7 +12,7 @@ export type ThemePreference = {
   accent: string;
 };
 
-const DEFAULT_PREFERENCE: ThemePreference = { mode: 'system', accent: accentPalette.coral };
+const DEFAULT_PREFERENCE: ThemePreference = { mode: 'system', accent: accentPalette.tomato };
 const VALID_MODES: ThemeMode[] = ['system', 'light', 'dark'];
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
 

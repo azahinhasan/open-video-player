@@ -41,6 +41,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     paddingHorizontal: 16,
+    paddingTop: 12,
     paddingBottom: 12,
   },
   chip: {

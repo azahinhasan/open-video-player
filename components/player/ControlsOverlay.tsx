@@ -1,12 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChapterRail } from '@/components/player/ChapterRail';
 import { MoreOptionsMenu } from '@/components/player/MoreOptionsMenu';
-import type { VideoZoomMode } from '@/components/player/VideoPlayer';
+import { MuteButton } from '@/components/player/MuteButton';
+import { usePlaybackPreferences } from '@/hooks/usePlaybackPreferences';
+import { useAccentColor } from '@/hooks/useThemePreference';
 import { formatTime } from '@/utils/formatTime';
 
 type ControlsOverlayProps = {
@@ -25,11 +32,12 @@ type ControlsOverlayProps = {
   onRateChange: (rate: number) => void;
   loop: boolean;
   onToggleLoop: () => void;
-  zoomMode: VideoZoomMode;
   onCycleZoomMode: () => void;
   hasSubtitle: boolean;
   subtitlesEnabled: boolean;
   onToggleSubtitles: () => void;
+  volumeLevel: SharedValue<number>;
+  onSetVolume: (value: number) => void;
   onBack: () => void;
   onLock: () => void;
   onTogglePlayPause: () => void;
@@ -58,11 +66,12 @@ export function ControlsOverlay({
   onRateChange,
   loop,
   onToggleLoop,
-  zoomMode,
   onCycleZoomMode,
   hasSubtitle,
   subtitlesEnabled,
   onToggleSubtitles,
+  volumeLevel,
+  onSetVolume,
   onBack,
   onLock,
   onTogglePlayPause,
@@ -77,6 +86,8 @@ export function ControlsOverlay({
   const progress = useSharedValue(visible ? 1 : 0);
   const [menuOpen, setMenuOpen] = useState(false);
   const insets = useSafeAreaInsets();
+  const accentColor = useAccentColor();
+  const controlsLayout = usePlaybackPreferences((s) => s.controlsLayout);
 
   const openMenu = () => {
     setMenuOpen(true);
@@ -112,6 +123,29 @@ export function ControlsOverlay({
     transform: [{ translateY: (1 - progress.value) * 12 }],
   }));
 
+  const transportControls = (
+    <>
+      <Pressable style={styles.iconButton} onPress={onPrevious} disabled={!hasPrevious} hitSlop={12}>
+        <Ionicons name="play-skip-back" size={26} color={hasPrevious ? '#fff' : '#555'} />
+      </Pressable>
+      <Pressable style={styles.iconButton} onPress={() => onSeekBy(-10)} hitSlop={12}>
+        <Ionicons name="play-back" size={26} color="#fff" />
+      </Pressable>
+      <Pressable
+        style={[styles.playButton, { backgroundColor: accentColor }]}
+        onPress={onTogglePlayPause}
+        hitSlop={12}>
+        <Ionicons name={paused ? 'play' : 'pause'} size={30} color="#fff" />
+      </Pressable>
+      <Pressable style={styles.iconButton} onPress={() => onSeekBy(10)} hitSlop={12}>
+        <Ionicons name="play-forward" size={26} color="#fff" />
+      </Pressable>
+      <Pressable style={styles.iconButton} onPress={onNext} disabled={!hasNext} hitSlop={12}>
+        <Ionicons name="play-skip-forward" size={26} color={hasNext ? '#fff' : '#555'} />
+      </Pressable>
+    </>
+  );
+
   return (
     <Animated.View
       style={[styles.fill, containerStyle]}
@@ -129,9 +163,7 @@ export function ControlsOverlay({
         <Text style={styles.title} numberOfLines={1}>
           {title}
         </Text>
-        <Pressable style={styles.iconButton} onPress={onLock} hitSlop={12}>
-          <Ionicons name="lock-open-outline" size={20} color="#fff" />
-        </Pressable>
+        <MuteButton volumeLevel={volumeLevel} onSetVolume={onSetVolume} size={20} color="#fff" />
         <Pressable
           style={styles.iconButton}
           onPress={() => (menuOpen ? closeMenu() : openMenu())}
@@ -140,27 +172,11 @@ export function ControlsOverlay({
         </Pressable>
       </Animated.View>
 
-      <View style={styles.centerRow} pointerEvents="box-none">
-        <Pressable
-          style={styles.iconButton}
-          onPress={onPrevious}
-          disabled={!hasPrevious}
-          hitSlop={12}>
-          <Ionicons name="play-skip-back" size={26} color={hasPrevious ? '#fff' : '#555'} />
-        </Pressable>
-        <Pressable style={styles.iconButton} onPress={() => onSeekBy(-10)} hitSlop={12}>
-          <Ionicons name="play-back" size={26} color="#fff" />
-        </Pressable>
-        <Pressable style={styles.playButton} onPress={onTogglePlayPause} hitSlop={12}>
-          <Ionicons name={paused ? 'play' : 'pause'} size={34} color="#fff" />
-        </Pressable>
-        <Pressable style={styles.iconButton} onPress={() => onSeekBy(10)} hitSlop={12}>
-          <Ionicons name="play-forward" size={26} color="#fff" />
-        </Pressable>
-        <Pressable style={styles.iconButton} onPress={onNext} disabled={!hasNext} hitSlop={12}>
-          <Ionicons name="play-skip-forward" size={26} color={hasNext ? '#fff' : '#555'} />
-        </Pressable>
-      </View>
+      {controlsLayout === 'center' ? (
+        <View style={styles.centerRow} pointerEvents="box-none">
+          {transportControls}
+        </View>
+      ) : null}
 
       <Animated.View
         style={[
@@ -179,11 +195,19 @@ export function ControlsOverlay({
           onScrubStart={onScrubStart}
           onScrubEnd={onScrubEnd}
         />
+        {controlsLayout === 'bottom' ? (
+          <View style={styles.bottomTransportRow} pointerEvents="box-none">
+            {transportControls}
+          </View>
+        ) : null}
         <View style={styles.timeRow}>
           <Text style={styles.timeText}>
             {formatTime(currentTime)} / {formatTime(duration)}
           </Text>
           <View style={styles.timeSpacer} />
+          <Pressable style={styles.orientationButton} onPress={onCycleZoomMode} hitSlop={12}>
+            <Ionicons name="scan-outline" size={20} color="#fff" />
+          </Pressable>
           <Pressable style={styles.orientationButton} onPress={onToggleOrientation} hitSlop={12}>
             <Ionicons
               name={isLandscape ? 'phone-portrait-outline' : 'phone-landscape-outline'}
@@ -201,11 +225,10 @@ export function ControlsOverlay({
         onRateChange={onRateChange}
         loop={loop}
         onToggleLoop={onToggleLoop}
-        zoomMode={zoomMode}
-        onCycleZoomMode={onCycleZoomMode}
         hasSubtitle={hasSubtitle}
         subtitlesEnabled={subtitlesEnabled}
         onToggleSubtitles={onToggleSubtitles}
+        onLock={onLock}
         topOffset={insets.top + 48}
         rightOffset={insets.right + 12}
       />
@@ -249,8 +272,15 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   playButton: {
-    padding: 10,
-    marginHorizontal: 8,
+    padding: 14,
+    marginHorizontal: 10,
+    borderRadius: 999,
+  },
+  bottomTransportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
   },
   bottomBar: {
     position: 'absolute',
@@ -264,6 +294,7 @@ const styles = StyleSheet.create({
   timeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
     paddingHorizontal: 16,
     marginTop: 6,
   },

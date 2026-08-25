@@ -25,6 +25,13 @@ const SEEK_PIXELS_PER_SECOND = 8;
 type GestureLayerProps = {
   currentTime: number;
   duration: number;
+  /**
+   * Shared with the mute button in ControlsOverlay so both always reflect
+   * the same media volume — see app/player/[id].tsx for why this can't just
+   * be owned locally (self-triggered volume changes don't reliably echo
+   * back through the native "volume changed" listener).
+   */
+  volumeLevel: SharedValue<number>;
   onSeekBy: (deltaSeconds: number) => void;
   onSeekTo: (time: number) => void;
   onToggleControls: () => void;
@@ -43,6 +50,7 @@ type GestureLayerProps = {
 export function GestureLayer({
   currentTime,
   duration,
+  volumeLevel,
   onSeekBy,
   onSeekTo,
   onToggleControls,
@@ -52,14 +60,12 @@ export function GestureLayer({
 
   const brightnessLevel = useSharedValue(0.5);
   const brightnessOpacity = useSharedValue(0);
-  const volumeLevel = useSharedValue(0.5);
   const volumeOpacity = useSharedValue(0);
   const leftFlashOpacity = useSharedValue(0);
   const rightFlashOpacity = useSharedValue(0);
   const seekOpacity = useSharedValue(0);
 
   const brightnessRef = useRef(0.5);
-  const volumeRef = useRef(0.5);
   const brightnessStartRef = useRef(0.5);
   const volumeStartRef = useRef(0.5);
   const lastBrightnessCommitRef = useRef(0);
@@ -85,13 +91,10 @@ export function GestureLayer({
         brightnessLevel.value = value;
       })
       .catch(() => {});
-    VolumeManager.getVolume()
-      .then((result) => {
-        volumeRef.current = result.volume;
-        volumeLevel.value = result.volume;
-      })
-      .catch(() => {});
-    // Only needs to run once on mount to seed the HUDs with the real current levels.
+    // Volume itself is fetched/synced by the parent (app/player/[id].tsx)
+    // into the shared volumeLevel prop, so it stays correct even when the
+    // mute button changes it while this gesture isn't active.
+    // Only needs to run once on mount to seed brightness with its real level.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -167,13 +170,12 @@ export function GestureLayer({
     .activeOffsetY([-8, 8])
     .failOffsetX([-24, 24])
     .onStart(() => {
-      volumeStartRef.current = volumeRef.current;
+      volumeStartRef.current = volumeLevel.value;
       showHud(volumeOpacity);
     })
     .onUpdate((event) => {
       const delta = -event.translationY / (height * 0.75);
       const next = Math.min(1, Math.max(0, volumeStartRef.current + delta));
-      volumeRef.current = next;
       volumeLevel.value = next;
       commitVolume(next, false);
     })
@@ -181,7 +183,7 @@ export function GestureLayer({
       if (!success) {
         return;
       }
-      commitVolume(volumeRef.current, true);
+      commitVolume(volumeLevel.value, true);
       hideHudDelayed(volumeOpacity);
     });
 
@@ -289,6 +291,7 @@ export function GestureLayer({
       <BrightnessVolumeHUD
         side="right"
         icon="volume-high"
+        zeroIcon="volume-mute"
         level={volumeLevel}
         opacity={volumeOpacity}
       />
