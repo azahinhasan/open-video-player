@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { ActionMenu, type ActionMenuOption } from '@/components/library/ActionMenu';
 import { FolderListItem } from '@/components/library/FolderListItem';
@@ -15,7 +15,7 @@ import type { VideoFolder } from '@/types/video';
 import { formatTime } from '@/utils/formatTime';
 
 export default function LibraryScreen() {
-  const { videos, folders, videosForFolder, status, error, canAskAgain, requestAccess, deleteVideos } =
+  const { videos, folders, videosForFolder, status, error, canAskAgain, requestAccess, rescan, deleteVideos } =
     useVideoLibrary();
   const accentColor = useAccentColor();
   const router = useRouter();
@@ -130,6 +130,14 @@ export default function LibraryScreen() {
         data={folders}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl
+            refreshing={status === 'scanning'}
+            onRefresh={rescan}
+            tintColor={accentColor}
+            colors={[accentColor]}
+          />
+        }
         renderItem={({ item }) => (
           <FolderListItem folder={item} onPress={handleOpenFolder} onLongPress={setActionMenuFolder} />
         )}

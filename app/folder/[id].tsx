@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, StyleSheet } from 'react-native';
 
 import { ActionMenu, type ActionMenuOption } from '@/components/library/ActionMenu';
 import { PropertiesSheet, type PropertyRow } from '@/components/library/PropertiesSheet';
@@ -37,7 +37,7 @@ function sortVideos(videos: VideoAsset[], mode: SortMode): VideoAsset[] {
 
 export default function FolderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { folders, videosForFolder, updateVideoMeta, deleteVideos } = useVideoLibrary();
+  const { folders, videosForFolder, updateVideoMeta, deleteVideos, status, rescan } = useVideoLibrary();
   const setQueue = usePlaybackStore((s) => s.setQueue);
   const { viewMode, toggleViewMode } = useViewMode();
   const accentColor = useAccentColor();
@@ -147,6 +147,14 @@ export default function FolderScreen() {
         keyExtractor={(item) => item.id}
         numColumns={viewMode === 'grid' ? 2 : 1}
         contentContainerStyle={viewMode === 'grid' ? styles.grid : styles.list}
+        refreshControl={
+          <RefreshControl
+            refreshing={status === 'scanning'}
+            onRefresh={rescan}
+            tintColor={accentColor}
+            colors={[accentColor]}
+          />
+        }
         ListHeaderComponent={<SortControl mode={sortMode} onChange={setSortMode} />}
         renderItem={({ item }) =>
           viewMode === 'grid' ? (

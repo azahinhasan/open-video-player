@@ -11,9 +11,9 @@ export type ThemePreference = {
   accent: AccentColorKey;
 };
 
-const DEFAULT_PREFERENCE: ThemePreference = { mode: 'system', accent: 'orange' };
+const DEFAULT_PREFERENCE: ThemePreference = { mode: 'system', accent: 'coral' };
 const VALID_MODES: ThemeMode[] = ['system', 'light', 'dark'];
-const VALID_ACCENTS: AccentColorKey[] = ['orange', 'blue', 'green', 'purple'];
+const VALID_ACCENTS: AccentColorKey[] = ['coral', 'teal', 'amber', 'violet'];
 
 function preferenceFile(): File {
   return new File(Paths.document, PREFERENCE_FILE_NAME);

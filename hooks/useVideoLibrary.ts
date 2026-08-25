@@ -3,6 +3,7 @@ import * as MediaLibrary from 'expo-media-library';
 import { create } from 'zustand';
 
 import type { VideoAsset, VideoFolder } from '@/types/video';
+import { useLibraryPreferences } from '@/hooks/useLibraryPreferences';
 import { readMediaCache, writeMediaCache } from '@/utils/mediaCache';
 
 export type LibraryStatus =
@@ -108,10 +109,18 @@ const useVideoLibraryStore = create<VideoLibraryStoreState>((set, get) => ({
     (async () => {
       const existing = await MediaLibrary.getPermissionsAsync(false, ['video']);
       set({ canAskAgain: existing.canAskAgain });
-      if (existing.granted || existing.accessPrivileges === 'limited') {
+      if (!(existing.granted || existing.accessPrivileges === 'limited')) {
+        set({ status: 'needs-permission' });
+        return;
+      }
+      // Skip the automatic launch scan when the user has disabled it and we
+      // already have cached videos to show — an empty cache still needs a
+      // scan regardless, otherwise there'd be nothing on screen to pull-to-refresh.
+      const shouldAutoScan = useLibraryPreferences.getState().autoRefreshOnLaunch || get().videos.length === 0;
+      if (shouldAutoScan) {
         await get().rescan();
       } else {
-        set({ status: 'needs-permission' });
+        set({ status: 'ready' });
       }
     })();
   },

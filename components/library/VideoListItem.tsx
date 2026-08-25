@@ -21,10 +21,11 @@ type VideoListItemProps = {
 function VideoListItemImpl({ video, onPress, onLongPress, onMeta }: VideoListItemProps) {
   const thumbnailRequested = useRef(false);
   const resumeEntry = usePlaybackStore((s) => s.history[video.id]);
+  const viewed = usePlaybackStore((s) => s.viewed[video.id]);
   const accentColor = useAccentColor();
   const resumeProgress =
     resumeEntry && video.duration ? Math.min(1, resumeEntry.positionSeconds / video.duration) : 0;
-  const isNew = isRecentlyAdded(video.creationTime);
+  const isNew = isRecentlyAdded(video.creationTime) && !viewed;
 
   useEffect(() => {
     if (video.thumbnailUri !== null || thumbnailRequested.current) {

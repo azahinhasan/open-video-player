@@ -1,38 +1,19 @@
 /**
  * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Values are sourced from theme/tokens.ts, the app's single design-token source of truth.
  */
 
 import { Platform } from 'react-native';
 
-export const ACCENT_COLORS = {
-  orange: '#F97316',
-  blue: '#3B82F6',
-  green: '#22C55E',
-  purple: '#A855F7',
-} as const;
+import { accentLabels, accentPalette, themeColors, type AccentKey } from '@/theme/tokens';
 
-export type AccentColorKey = keyof typeof ACCENT_COLORS;
+export const ACCENT_COLORS = accentPalette;
 
-export const ACCENT_COLOR_LABELS: Record<AccentColorKey, string> = {
-  orange: 'Orange',
-  blue: 'Blue',
-  green: 'Green',
-  purple: 'Purple',
-};
+export type AccentColorKey = AccentKey;
 
-export const Colors = {
-  light: {
-    text: '#11181C',
-    background: '#fff',
-    icon: '#687076',
-  },
-  dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    icon: '#9BA1A6',
-  },
-};
+export const ACCENT_COLOR_LABELS = accentLabels;
+
+export const Colors = themeColors;
 
 export const Fonts = Platform.select({
   ios: {

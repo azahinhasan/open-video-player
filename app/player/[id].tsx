@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import type {
   OnBufferData,
   OnLoadData,
@@ -21,6 +21,7 @@ import { useOrientationLock } from '@/hooks/useOrientationLock';
 import { usePlaybackPreferences } from '@/hooks/usePlaybackPreferences';
 import { adjacentVideoId, usePlaybackStore } from '@/hooks/usePlaybackStore';
 import { useAccentColor } from '@/hooks/useThemePreference';
+import type { VideoAsset } from '@/types/video';
 
 const AUTO_HIDE_DELAY_MS = 3000;
 const ZOOM_CYCLE: VideoZoomMode[] = ['contain', 'cover', 'stretch'];
@@ -56,6 +57,50 @@ export default function PlayerScreen() {
   const [zoomMode, setZoomMode] = useState<VideoZoomMode>('contain');
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Refs mirror the latest video/time/duration so the unmount cleanup and
+  // AppState listener below can read fresh values without depending on them
+  // (which would tear down and reinstall the listener on every progress tick).
+  const currentVideoRef = useRef<VideoAsset | null>(video);
+  const currentTimeRef = useRef(0);
+  const durationRef = useRef(0);
+
+  useEffect(() => {
+    currentVideoRef.current = video;
+  }, [video]);
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
+
+  const persistCurrentPosition = useCallback(() => {
+    const currentVideo = currentVideoRef.current;
+    if (currentVideo) {
+      savePosition(currentVideo.id, currentTimeRef.current, durationRef.current);
+    }
+  }, [savePosition]);
+
+  // Covers exits that don't run handleBack: the system back gesture/button
+  // (which unmounts this screen without calling the on-screen back handler)
+  // and simply navigating elsewhere after scrubbing without pressing pause.
+  useEffect(() => {
+    return () => {
+      persistCurrentPosition();
+    };
+  }, [persistCurrentPosition]);
+
+  // Covers backgrounding the app (home button, app switcher) mid-scrub,
+  // where the screen never unmounts so the effect above wouldn't fire.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background' || nextState === 'inactive') {
+        persistCurrentPosition();
+      }
+    });
+    return () => subscription.remove();
+  }, [persistCurrentPosition]);
 
   useKeepAwake();
   useOrientationLock(orientationLock);
@@ -105,6 +150,7 @@ export default function PlayerScreen() {
     setZoomMode('contain');
     setSubtitlesEnabled(true);
 
+    usePlaybackStore.getState().markViewed(id);
     play();
     showControls();
     return clearHideTimer;

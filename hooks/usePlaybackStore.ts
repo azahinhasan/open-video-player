@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import type { VideoAsset } from '@/types/video';
+import { readViewedVideos, writeViewedVideos, type ViewedVideos } from '@/utils/viewedVideos';
 import { readWatchHistory, writeWatchHistory, type WatchHistory, type WatchHistoryEntry } from '@/utils/watchHistory';
 
 const RESUME_THRESHOLD_SECONDS = 5;
@@ -10,6 +11,7 @@ type PlaybackState = {
   queue: VideoAsset[];
   paused: boolean;
   history: WatchHistory;
+  viewed: ViewedVideos;
   setQueue: (queue: VideoAsset[]) => void;
   play: () => void;
   pause: () => void;
@@ -18,12 +20,14 @@ type PlaybackState = {
   clearPosition: (videoId: string) => void;
   positionFor: (videoId: string) => number;
   resumeEntryFor: (videoId: string) => WatchHistoryEntry | null;
+  markViewed: (videoId: string) => void;
 };
 
 export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   queue: [],
   paused: false,
   history: readWatchHistory(),
+  viewed: readViewedVideos(),
   setQueue: (queue) => set({ queue, paused: false }),
   play: () => set({ paused: false }),
   pause: () => set({ paused: true }),
@@ -47,6 +51,14 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   },
   positionFor: (videoId) => get().history[videoId]?.positionSeconds ?? 0,
   resumeEntryFor: (videoId) => get().history[videoId] ?? null,
+  markViewed: (videoId) => {
+    if (get().viewed[videoId]) {
+      return;
+    }
+    const viewed = { ...get().viewed, [videoId]: true as const };
+    set({ viewed });
+    writeViewedVideos(viewed);
+  },
 }));
 
 export function adjacentVideoId(
