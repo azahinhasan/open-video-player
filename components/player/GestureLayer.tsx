@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Brightness from 'expo-brightness';
+import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -220,6 +221,7 @@ export function GestureLayer({
       }
       onSeekBy(-10);
       flash(leftFlashOpacity);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     });
 
   const rightDoubleTap = Gesture.Tap()
@@ -232,6 +234,7 @@ export function GestureLayer({
       }
       onSeekBy(10);
       flash(rightFlashOpacity);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     });
 
   const singleTap = Gesture.Tap()

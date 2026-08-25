@@ -2,8 +2,9 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { useAccentColor } from '@/hooks/useThemePreference';
+import type { SortMode } from '@/utils/sortPreference';
 
-export type SortMode = 'name' | 'date' | 'duration';
+export type { SortMode };
 
 type SortControlProps = {
   mode: SortMode;

@@ -1,8 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
-import { StyleSheet, Switch, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { AccentSwatch } from '@/components/settings/AccentSwatch';
+import { CustomColorSheet } from '@/components/settings/CustomColorSheet';
 import { SegmentedControl } from '@/components/settings/SegmentedControl';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -44,7 +47,36 @@ function Card({ children }: { children: ReactNode }) {
   return <View style={[styles.card, { backgroundColor: surfaceColor, borderColor }]}>{children}</View>;
 }
 
+function CustomAccentButton({
+  color,
+  isSelected,
+  onPress,
+}: {
+  color: string;
+  isSelected: boolean;
+  onPress: () => void;
+}) {
+  const mutedColor = useThemeColor({}, 'textMuted');
+  return (
+    <Pressable onPress={onPress} style={styles.swatchWrap} hitSlop={8}>
+      <View style={styles.dotSlot}>
+        <View
+          style={[
+            styles.customDot,
+            isSelected ? { backgroundColor: color, borderColor: color } : { borderColor: mutedColor },
+          ]}>
+          {isSelected ? null : <Ionicons name="add" size={18} color={mutedColor} />}
+        </View>
+      </View>
+      <ThemedText style={[styles.swatchLabel, isSelected ? styles.swatchLabelSelected : null]}>
+        Custom
+      </ThemedText>
+    </Pressable>
+  );
+}
+
 export default function SettingsScreen() {
+  const router = useRouter();
   const mode = useThemePreference((s) => s.mode);
   const setMode = useThemePreference((s) => s.setMode);
   const accent = useThemePreference((s) => s.accent);
@@ -52,6 +84,7 @@ export default function SettingsScreen() {
   const accentColor = useAccentColor();
   const borderColor = useThemeColor({}, 'surfaceBorder');
   const mutedColor = useThemeColor({}, 'textMuted');
+  const [colorSheetVisible, setColorSheetVisible] = useState(false);
 
   const resumeBehavior = usePlaybackPreferences((s) => s.resumeBehavior);
   const setResumeBehavior = usePlaybackPreferences((s) => s.setResumeBehavior);
@@ -60,6 +93,8 @@ export default function SettingsScreen() {
 
   const autoRefreshOnLaunch = useLibraryPreferences((s) => s.autoRefreshOnLaunch);
   const setAutoRefreshOnLaunch = useLibraryPreferences((s) => s.setAutoRefreshOnLaunch);
+
+  const isPreset = ACCENT_KEYS.some((key) => ACCENT_COLORS[key].toLowerCase() === accent.toLowerCase());
 
   return (
     <ThemedView style={styles.container}>
@@ -116,12 +151,37 @@ export default function SettingsScreen() {
               key={key}
               color={ACCENT_COLORS[key]}
               label={ACCENT_COLOR_LABELS[key]}
-              selected={key === accent}
-              onPress={() => setAccent(key)}
+              selected={accent.toLowerCase() === ACCENT_COLORS[key].toLowerCase()}
+              onPress={() => setAccent(ACCENT_COLORS[key])}
             />
           ))}
+          <CustomAccentButton
+            color={accent}
+            isSelected={!isPreset}
+            onPress={() => setColorSheetVisible(true)}
+          />
         </View>
       </Card>
+
+      <SectionHeader title="Storage" />
+      <Card>
+        <Pressable style={styles.row} onPress={() => router.push('/storage-cleanup')}>
+          <Ionicons name="server-outline" size={20} color={mutedColor} />
+          <ThemedText style={styles.rowLabel}>Storage & cleanup</ThemedText>
+          <View style={styles.rowSpacer} />
+          <Ionicons name="chevron-forward" size={18} color={mutedColor} />
+        </Pressable>
+      </Card>
+
+      <CustomColorSheet
+        visible={colorSheetVisible}
+        initialColor={accent}
+        onCancel={() => setColorSheetVisible(false)}
+        onConfirm={(hex) => {
+          setAccent(hex);
+          setColorSheetVisible(false);
+        }}
+      />
     </ThemedView>
   );
 }
@@ -184,5 +244,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.lg,
     justifyContent: 'space-between',
+  },
+  swatchWrap: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  dotSlot: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swatchLabel: {
+    fontSize: typography.size.micro,
+    opacity: 0.6,
+  },
+  swatchLabelSelected: {
+    opacity: 1,
+    fontWeight: typography.weight.medium,
   },
 });

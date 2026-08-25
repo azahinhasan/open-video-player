@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -78,6 +79,11 @@ export function ChapterRail({
     (index, previous) => {
       if (index !== previous) {
         runOnJS(setPreviewChapterIndex)(index);
+        // previous === null is the reaction's initial fire (not a real crossing);
+        // only tick while an actual drag is in progress.
+        if (previous !== null && isDragging.value) {
+          runOnJS(triggerSegmentHaptic)();
+        }
       }
     },
     [chapters.length]
@@ -119,6 +125,10 @@ export function ChapterRail({
     },
     [duration, onSeek]
   );
+
+  const triggerSegmentHaptic = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+  }, []);
 
   const panGesture = useMemo(
     () =>

@@ -1,13 +1,13 @@
 import { create } from 'zustand';
 
-import { ACCENT_COLORS, type AccentColorKey } from '@/constants/theme';
 import { readThemePreference, writeThemePreference, type ThemeMode } from '@/utils/themePreference';
 
 type ThemePreferenceState = {
   mode: ThemeMode;
-  accent: AccentColorKey;
+  /** Hex color — one of the presets, or a user-picked custom color. */
+  accent: string;
   setMode: (mode: ThemeMode) => void;
-  setAccent: (accent: AccentColorKey) => void;
+  setAccent: (accent: string) => void;
 };
 
 const initial = readThemePreference();
@@ -26,5 +26,5 @@ export const useThemePreference = create<ThemePreferenceState>((set, get) => ({
 }));
 
 export function useAccentColor(): string {
-  return useThemePreference((s) => ACCENT_COLORS[s.accent]);
+  return useThemePreference((s) => s.accent);
 }

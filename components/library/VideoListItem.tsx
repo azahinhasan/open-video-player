@@ -16,9 +16,20 @@ type VideoListItemProps = {
   onPress: (video: VideoAsset) => void;
   onLongPress?: (video: VideoAsset) => void;
   onMeta: (id: string, patch: Partial<Pick<VideoAsset, 'duration' | 'thumbnailUri'>>) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (video: VideoAsset) => void;
 };
 
-function VideoListItemImpl({ video, onPress, onLongPress, onMeta }: VideoListItemProps) {
+function VideoListItemImpl({
+  video,
+  onPress,
+  onLongPress,
+  onMeta,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
+}: VideoListItemProps) {
   const thumbnailRequested = useRef(false);
   const resumeEntry = usePlaybackStore((s) => s.history[video.id]);
   const viewed = usePlaybackStore((s) => s.viewed[video.id]);
@@ -42,8 +53,8 @@ function VideoListItemImpl({ video, onPress, onLongPress, onMeta }: VideoListIte
   return (
     <Pressable
       style={styles.row}
-      onPress={() => onPress(video)}
-      onLongPress={onLongPress ? () => onLongPress(video) : undefined}>
+      onPress={() => (selectable ? onToggleSelect?.(video) : onPress(video))}
+      onLongPress={selectable ? undefined : onLongPress ? () => onLongPress(video) : undefined}>
       <View style={styles.thumbnailWrap}>
         {video.thumbnailUri ? (
           <Image source={{ uri: video.thumbnailUri }} style={styles.thumbnail} contentFit="cover" />
@@ -52,6 +63,11 @@ function VideoListItemImpl({ video, onPress, onLongPress, onMeta }: VideoListIte
             <Ionicons name="film-outline" size={22} color="#5a6672" />
           </View>
         )}
+        {selectable ? (
+          <View style={[styles.checkCircle, selected ? { backgroundColor: accentColor, borderColor: accentColor } : null]}>
+            {selected ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
+          </View>
+        ) : null}
         {isNew ? (
           <View style={[styles.newBadge, { backgroundColor: accentColor }]}>
             <ThemedText style={styles.newBadgeText}>NEW</ThemedText>
@@ -127,6 +143,19 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 9,
     fontWeight: '700',
+  },
+  checkCircle: {
+    position: 'absolute',
+    right: 4,
+    top: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   progressTrack: {
     position: 'absolute',

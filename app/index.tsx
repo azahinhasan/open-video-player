@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
@@ -41,6 +42,7 @@ export default function LibraryScreen() {
             text: 'Delete all',
             style: 'destructive',
             onPress: async () => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
               const success = await deleteVideos(folderVideos.map((v) => v.id));
               if (!success) {
                 Alert.alert("Couldn't delete", 'The folder was not fully deleted. Please try again.');
@@ -88,9 +90,14 @@ export default function LibraryScreen() {
     <Stack.Screen
       options={{
         headerRight: () => (
-          <Pressable onPress={() => router.push('/settings')} hitSlop={12}>
-            <Ionicons name="settings-outline" size={22} color={accentColor} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable onPress={() => router.push('/search')} hitSlop={12}>
+              <Ionicons name="search-outline" size={22} color={accentColor} />
+            </Pressable>
+            <Pressable onPress={() => router.push('/settings')} hitSlop={12}>
+              <Ionicons name="settings-outline" size={22} color={accentColor} />
+            </Pressable>
+          </View>
         ),
       }}
     />
@@ -177,5 +184,10 @@ const styles = StyleSheet.create({
   centerText: {
     textAlign: 'center',
     opacity: 0.7,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
 });

@@ -1,17 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, RefreshControl, StyleSheet } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { ActionMenu, type ActionMenuOption } from '@/components/library/ActionMenu';
 import { PropertiesSheet, type PropertyRow } from '@/components/library/PropertiesSheet';
-import { SortControl, type SortMode } from '@/components/library/SortControl';
+import { SortControl } from '@/components/library/SortControl';
 import { VideoGridItem } from '@/components/library/VideoGridItem';
 import { VideoListItem } from '@/components/library/VideoListItem';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useSortPreference, type SortMode } from '@/hooks/useSortPreference';
 import { usePlaybackStore } from '@/hooks/usePlaybackStore';
 import { useAccentColor } from '@/hooks/useThemePreference';
+import { useThemeColor } from '@/hooks/use-theme-color';
 import { useVideoLibrary } from '@/hooks/useVideoLibrary';
 import { useViewMode } from '@/hooks/useViewMode';
 import type { VideoAsset } from '@/types/video';
@@ -40,11 +43,16 @@ export default function FolderScreen() {
   const { folders, videosForFolder, updateVideoMeta, deleteVideos, status, rescan } = useVideoLibrary();
   const setQueue = usePlaybackStore((s) => s.setQueue);
   const { viewMode, toggleViewMode } = useViewMode();
+  const sortMode = useSortPreference((s) => s.sortMode);
+  const setSortMode = useSortPreference((s) => s.setSortMode);
   const accentColor = useAccentColor();
+  const mutedColor = useThemeColor({}, 'textMuted');
+  const dangerColor = useThemeColor({}, 'danger');
   const router = useRouter();
-  const [sortMode, setSortMode] = useState<SortMode>('name');
   const [actionMenuVideo, setActionMenuVideo] = useState<VideoAsset | null>(null);
   const [propertiesVideo, setPropertiesVideo] = useState<VideoAsset | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const folder = folders.find((f) => f.id === id);
   const videos = useMemo(() => sortVideos(videosForFolder(id), sortMode), [videosForFolder, id, sortMode]);
@@ -57,6 +65,33 @@ export default function FolderScreen() {
     [videos, setQueue, router]
   );
 
+  const enterSelectMode = useCallback((video: VideoAsset | null) => {
+    setSelectMode(true);
+    setSelectedIds(video ? new Set([video.id]) : new Set());
+  }, []);
+
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const toggleSelect = useCallback((video: VideoAsset) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(video.id)) {
+        next.delete(video.id);
+      } else {
+        next.add(video.id);
+      }
+      return next;
+    });
+  }, []);
+
+  const allSelected = videos.length > 0 && selectedIds.size === videos.length;
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds(allSelected ? new Set() : new Set(videos.map((v) => v.id)));
+  }, [allSelected, videos]);
+
   const handleDelete = useCallback(
     (video: VideoAsset) => {
       Alert.alert('Delete video?', `"${video.filename}" will be permanently deleted.`, [
@@ -65,6 +100,7 @@ export default function FolderScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
             const success = await deleteVideos([video.id]);
             if (!success) {
               Alert.alert("Couldn't delete", 'The video was not deleted. Please try again.');
@@ -76,8 +112,41 @@ export default function FolderScreen() {
     [deleteVideos]
   );
 
+  const handleBatchDelete = useCallback(() => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) {
+      return;
+    }
+    Alert.alert(
+      `Delete ${ids.length} video${ids.length === 1 ? '' : 's'}?`,
+      'This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+            const success = await deleteVideos(ids);
+            if (success) {
+              exitSelectMode();
+            } else {
+              Alert.alert("Couldn't delete", 'Some videos were not deleted. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  }, [selectedIds, deleteVideos, exitSelectMode]);
+
   const actionMenuOptions: ActionMenuOption[] = actionMenuVideo
     ? [
+        {
+          key: 'select',
+          label: 'Select',
+          icon: 'checkmark-circle-outline',
+          onPress: () => enterSelectMode(actionMenuVideo),
+        },
         {
           key: 'properties',
           label: 'Properties',
@@ -124,16 +193,41 @@ export default function FolderScreen() {
     <ThemedView style={styles.container}>
       <Stack.Screen
         options={{
-          title: folder?.name ?? 'Videos',
-          headerRight: () => (
-            <Pressable onPress={toggleViewMode} hitSlop={12}>
-              <Ionicons
-                name={viewMode === 'grid' ? 'list-outline' : 'grid-outline'}
-                size={22}
-                color={accentColor}
-              />
-            </Pressable>
-          ),
+          title: selectMode ? `${selectedIds.size} selected` : (folder?.name ?? 'Videos'),
+          headerLeft: selectMode
+            ? () => (
+                <Pressable onPress={exitSelectMode} hitSlop={12}>
+                  <Ionicons name="close" size={22} color={accentColor} />
+                </Pressable>
+              )
+            : undefined,
+          headerRight: () =>
+            selectMode ? (
+              <View style={styles.headerActions}>
+                <Pressable onPress={handleSelectAll} hitSlop={12}>
+                  <Ionicons
+                    name={allSelected ? 'checkbox' : 'checkbox-outline'}
+                    size={22}
+                    color={accentColor}
+                  />
+                </Pressable>
+                <Pressable onPress={handleBatchDelete} hitSlop={12} disabled={selectedIds.size === 0}>
+                  <Ionicons
+                    name="trash-outline"
+                    size={22}
+                    color={selectedIds.size === 0 ? mutedColor : dangerColor}
+                  />
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable onPress={toggleViewMode} hitSlop={12}>
+                <Ionicons
+                  name={viewMode === 'grid' ? 'list-outline' : 'grid-outline'}
+                  size={22}
+                  color={accentColor}
+                />
+              </Pressable>
+            ),
         }}
       />
 
@@ -163,6 +257,9 @@ export default function FolderScreen() {
               onPress={handlePress}
               onLongPress={setActionMenuVideo}
               onMeta={updateVideoMeta}
+              selectable={selectMode}
+              selected={selectedIds.has(item.id)}
+              onToggleSelect={toggleSelect}
             />
           ) : (
             <VideoListItem
@@ -170,6 +267,9 @@ export default function FolderScreen() {
               onPress={handlePress}
               onLongPress={setActionMenuVideo}
               onMeta={updateVideoMeta}
+              selectable={selectMode}
+              selected={selectedIds.has(item.id)}
+              onToggleSelect={toggleSelect}
             />
           )
         }
@@ -207,5 +307,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     opacity: 0.7,
     marginTop: 48,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
 });
