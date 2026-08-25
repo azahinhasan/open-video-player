@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -209,8 +209,8 @@ export function ControlsOverlay({
             <Ionicons name="scan-outline" size={20} color="#fff" />
           </Pressable>
           <Pressable style={styles.orientationButton} onPress={onToggleOrientation} hitSlop={12}>
-            <Ionicons
-              name={isLandscape ? 'phone-portrait-outline' : 'phone-landscape-outline'}
+            <MaterialCommunityIcons
+              name={isLandscape ? 'phone-rotate-portrait' : 'phone-rotate-landscape'}
               size={20}
               color="#fff"
             />
