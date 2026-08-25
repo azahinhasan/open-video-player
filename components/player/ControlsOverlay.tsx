@@ -48,6 +48,8 @@ type ControlsOverlayProps = {
   onScrubStart: () => void;
   onScrubEnd: () => void;
   onToggleOrientation: () => void;
+  pipSupported: boolean;
+  onEnterPip: () => void;
 };
 
 export function ControlsOverlay({
@@ -82,6 +84,8 @@ export function ControlsOverlay({
   onScrubStart,
   onScrubEnd,
   onToggleOrientation,
+  pipSupported,
+  onEnterPip,
 }: ControlsOverlayProps) {
   const progress = useSharedValue(visible ? 1 : 0);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -163,7 +167,6 @@ export function ControlsOverlay({
         <Text style={styles.title} numberOfLines={1}>
           {title}
         </Text>
-        <MuteButton volumeLevel={volumeLevel} onSetVolume={onSetVolume} size={20} color="#fff" />
         <Pressable
           style={styles.iconButton}
           onPress={() => (menuOpen ? closeMenu() : openMenu())}
@@ -215,6 +218,7 @@ export function ControlsOverlay({
               color="#fff"
             />
           </Pressable>
+          <MuteButton volumeLevel={volumeLevel} onSetVolume={onSetVolume} size={20} color="#fff" />
         </View>
       </Animated.View>
 
@@ -229,6 +233,8 @@ export function ControlsOverlay({
         subtitlesEnabled={subtitlesEnabled}
         onToggleSubtitles={onToggleSubtitles}
         onLock={onLock}
+        pipSupported={pipSupported}
+        onEnterPip={onEnterPip}
         topOffset={insets.top + 48}
         rightOffset={insets.right + 12}
       />

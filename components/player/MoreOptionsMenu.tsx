@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAccentColor } from '@/hooks/useThemePreference';
@@ -16,6 +16,8 @@ type MoreOptionsMenuProps = {
   subtitlesEnabled: boolean;
   onToggleSubtitles: () => void;
   onLock: () => void;
+  pipSupported: boolean;
+  onEnterPip: () => void;
   topOffset: number;
   rightOffset: number;
 };
@@ -31,6 +33,8 @@ export function MoreOptionsMenu({
   subtitlesEnabled,
   onToggleSubtitles,
   onLock,
+  pipSupported,
+  onEnterPip,
   topOffset,
   rightOffset,
 }: MoreOptionsMenuProps) {
@@ -78,6 +82,18 @@ export function MoreOptionsMenu({
         ) : null}
 
         <View style={styles.divider} />
+
+        {pipSupported ? (
+          <Pressable
+            style={styles.row}
+            onPress={() => {
+              onClose();
+              onEnterPip();
+            }}>
+            <MaterialCommunityIcons name="picture-in-picture-bottom-right-outline" size={18} color="#fff" />
+            <Text style={styles.rowText}>Picture-in-Picture</Text>
+          </Pressable>
+        ) : null}
 
         <Pressable
           style={styles.row}

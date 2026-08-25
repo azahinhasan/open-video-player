@@ -4,7 +4,7 @@
     "slug": "video-player-app",
     "version": "0.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/icon-tomato-final-1024.png",
+    "icon": "./assets/images/splash-icon-tomato-2048.png",
     "scheme": "videoplayerappmobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -29,7 +29,7 @@
           "backgroundColor": "#0B0C0E"
         }
       ],
-      "react-native-video",
+      ["react-native-video", { "enableAndroidPictureInPicture": true }],
       "expo-notifications",
       [
         "expo-media-library",

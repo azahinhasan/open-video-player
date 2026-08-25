@@ -9,6 +9,13 @@ export type { SortMode };
 type SortControlProps = {
   mode: SortMode;
   onChange: (mode: SortMode) => void;
+  /**
+   * Horizontal padding, in points. Defaults to 16 to match the list view's
+   * own row padding. The grid view already adds 10px of its own container
+   * padding plus each card's 6px margin (16px total) — pass 6 there so this
+   * doesn't stack on top and push the pills further right than the thumbnails.
+   */
+  edgeInset?: number;
 };
 
 const OPTIONS: { mode: SortMode; label: string }[] = [
@@ -17,11 +24,11 @@ const OPTIONS: { mode: SortMode; label: string }[] = [
   { mode: 'duration', label: 'Duration' },
 ];
 
-export function SortControl({ mode, onChange }: SortControlProps) {
+export function SortControl({ mode, onChange, edgeInset = 16 }: SortControlProps) {
   const accentColor = useAccentColor();
 
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, { paddingHorizontal: edgeInset }]}>
       {OPTIONS.map((option) => (
         <Pressable
           key={option.mode}
@@ -40,7 +47,6 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: 8,
-    paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 12,
   },

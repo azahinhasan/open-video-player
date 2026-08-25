@@ -3,6 +3,7 @@ import { StyleSheet } from 'react-native';
 import Video, {
   OnBufferData,
   OnLoadData,
+  OnPictureInPictureStatusChangedData,
   OnProgressData,
   OnVideoErrorData,
   ResizeMode,
@@ -22,11 +23,15 @@ type VideoPlayerProps = {
   zoomMode?: VideoZoomMode;
   subtitleUri?: string | null;
   subtitlesEnabled?: boolean;
+  /** Auto-enters Picture-in-Picture when the user backgrounds the app while playing. */
+  enterPictureInPictureOnLeave?: boolean;
   onLoad?: (data: OnLoadData) => void;
   onProgress?: (data: OnProgressData) => void;
   onBuffer?: (data: OnBufferData) => void;
   onEnd?: () => void;
   onError?: (data: OnVideoErrorData) => void;
+  onPictureInPictureStatusChanged?: (isActive: boolean) => void;
+  onRestoreUserInterfaceForPictureInPictureStop?: () => void;
 };
 
 const ZOOM_MODE_TO_RESIZE_MODE: Record<VideoZoomMode, ResizeMode> = {
@@ -45,11 +50,14 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(function Video
     zoomMode = 'contain',
     subtitleUri,
     subtitlesEnabled = true,
+    enterPictureInPictureOnLeave = false,
     onLoad,
     onProgress,
     onBuffer,
     onEnd,
     onError,
+    onPictureInPictureStatusChanged,
+    onRestoreUserInterfaceForPictureInPictureStop,
   },
   ref
 ) {
@@ -87,11 +95,16 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(function Video
           : undefined
       }
       progressUpdateInterval={250}
+      enterPictureInPictureOnLeave={enterPictureInPictureOnLeave}
       onLoad={onLoad}
       onProgress={onProgress}
       onBuffer={onBuffer}
       onEnd={onEnd}
       onError={onError}
+      onPictureInPictureStatusChanged={(e: OnPictureInPictureStatusChangedData) =>
+        onPictureInPictureStatusChanged?.(e.isActive)
+      }
+      onRestoreUserInterfaceForPictureInPictureStop={onRestoreUserInterfaceForPictureInPictureStop}
       playInBackground={false}
       playWhenInactive={false}
     />

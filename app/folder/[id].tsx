@@ -266,7 +266,9 @@ export default function FolderScreen() {
             colors={[accentColor]}
           />
         }
-        ListHeaderComponent={<SortControl mode={sortMode} onChange={setSortMode} />}
+        ListHeaderComponent={
+          <SortControl mode={sortMode} onChange={setSortMode} edgeInset={viewMode === 'grid' ? 6 : 16} />
+        }
         renderItem={({ item }) =>
           viewMode === 'grid' ? (
             <VideoGridItem

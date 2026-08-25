@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import type {
   OnBufferData,
@@ -34,6 +34,10 @@ const ZOOM_CYCLE: VideoZoomMode[] = ['contain', 'cover', 'stretch'];
 // zone needs to grow to cover that extra row too, for the same reason.
 const BOTTOM_CONTROLS_TOUCH_HEIGHT_CENTER = 110;
 const BOTTOM_CONTROLS_TOUCH_HEIGHT_WITH_TRANSPORT = 190;
+// Picture-in-Picture needs API 26 (Android 8.0) — Platform.Version on Android
+// is the SDK int directly, so this hides the button on unsupported devices
+// instead of leaving a control that silently no-ops.
+const PIP_SUPPORTED = Platform.OS === 'android' && Platform.Version >= 26;
 
 export default function PlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -64,6 +68,7 @@ export default function PlayerScreen() {
   const [loop, setLoop] = useState(false);
   const [zoomMode, setZoomMode] = useState<VideoZoomMode>('contain');
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
+  const [pipActive, setPipActive] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Single source of truth for media volume, shared between GestureLayer's
@@ -298,6 +303,21 @@ export default function PlayerScreen() {
     setZoomMode((prev) => ZOOM_CYCLE[(ZOOM_CYCLE.indexOf(prev) + 1) % ZOOM_CYCLE.length]);
   }, []);
 
+  const handleEnterPip = useCallback(() => {
+    videoRef.current?.enterPictureInPicture?.();
+  }, []);
+
+  const handlePipStatusChanged = useCallback((isActive: boolean) => {
+    setPipActive(isActive);
+  }, []);
+
+  const handleRestoreFromPip = useCallback(() => {
+    setPipActive(false);
+    // Tells Android the JS side has finished restoring its UI — without this
+    // the app can be left in a stuck/blank state after leaving PiP.
+    videoRef.current?.restoreUserInterfaceForPictureInPictureStopCompleted?.(true);
+  }, []);
+
   const handleBack = useCallback(() => {
     if (video) {
       savePosition(video.id, currentTime, duration);
@@ -345,14 +365,17 @@ export default function PlayerScreen() {
             zoomMode={zoomMode}
             subtitleUri={video.subtitleUri}
             subtitlesEnabled={subtitlesEnabled}
+            enterPictureInPictureOnLeave={PIP_SUPPORTED}
             onLoad={handleLoad}
             onProgress={handleProgress}
             onBuffer={handleBuffer}
             onEnd={handleEnd}
             onError={handleError}
+            onPictureInPictureStatusChanged={handlePipStatusChanged}
+            onRestoreUserInterfaceForPictureInPictureStop={handleRestoreFromPip}
           />
 
-          {locked ? (
+          {pipActive ? null : locked ? (
             <Pressable style={styles.unlockButton} onPress={() => setLocked(false)} hitSlop={16}>
               <Ionicons name="lock-closed-outline" size={22} color="#fff" />
             </Pressable>
@@ -418,6 +441,8 @@ export default function PlayerScreen() {
                 onScrubStart={handleScrubStart}
                 onScrubEnd={handleScrubEnd}
                 onToggleOrientation={handleToggleOrientation}
+                pipSupported={PIP_SUPPORTED}
+                onEnterPip={handleEnterPip}
               />
             </>
           )}
