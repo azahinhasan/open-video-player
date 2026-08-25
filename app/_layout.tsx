@@ -20,9 +20,11 @@ export default function RootLayout() {
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
           <Stack>
             <Stack.Screen name="index" options={{ title: 'Library' }} />
+            <Stack.Screen name="folder/[id]" options={{ title: 'Videos' }} />
+            <Stack.Screen name="settings" options={{ title: 'Settings' }} />
             <Stack.Screen
               name="player/[id]"
-              options={{ headerShown: false, animation: 'fade', orientation: 'landscape' }}
+              options={{ headerShown: false, animation: 'fade' }}
             />
           </Stack>
           <StatusBar style="auto" />

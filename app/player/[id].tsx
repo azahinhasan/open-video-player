@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type {
@@ -14,13 +15,19 @@ import type {
 
 import { ControlsOverlay } from '@/components/player/ControlsOverlay';
 import { GestureLayer } from '@/components/player/GestureLayer';
-import { ResumePrompt } from '@/components/player/ResumePrompt';
 import { VideoPlayer, type VideoZoomMode } from '@/components/player/VideoPlayer';
+import { useImmersiveMode } from '@/hooks/useImmersiveMode';
 import { useOrientationLock } from '@/hooks/useOrientationLock';
+import { usePlaybackPreferences } from '@/hooks/usePlaybackPreferences';
 import { adjacentVideoId, usePlaybackStore } from '@/hooks/usePlaybackStore';
+import { useAccentColor } from '@/hooks/useThemePreference';
 
 const AUTO_HIDE_DELAY_MS = 3000;
 const ZOOM_CYCLE: VideoZoomMode[] = ['contain', 'cover', 'stretch'];
+// Generously covers the Chapter Rail's touch area plus the time row beneath
+// it, so GestureLayer's full-screen zones don't compete with the rail's own
+// gesture for taps while the bottom bar is actually on screen.
+const BOTTOM_CONTROLS_TOUCH_HEIGHT = 110;
 
 export default function PlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -34,14 +41,15 @@ export default function PlayerScreen() {
 
   const video = queue.find((v) => v.id === id) ?? null;
   const videoRef = useRef<VideoRef>(null);
+  const accentColor = useAccentColor();
+  const resumeBehavior = usePlaybackPreferences((s) => s.resumeBehavior);
 
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [buffering, setBuffering] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [controlsVisible, setControlsVisible] = useState(true);
-  const [orientationLock, setOrientationLock] = useState(ScreenOrientation.OrientationLock.LANDSCAPE);
-  const [resumePrompt, setResumePrompt] = useState<{ positionSeconds: number } | null>(null);
+  const [orientationLock, setOrientationLock] = useState(ScreenOrientation.OrientationLock.PORTRAIT_UP);
   const [locked, setLocked] = useState(false);
   const [rate, setRate] = useState(1);
   const [loop, setLoop] = useState(false);
@@ -51,6 +59,7 @@ export default function PlayerScreen() {
 
   useKeepAwake();
   useOrientationLock(orientationLock);
+  useImmersiveMode(!controlsVisible);
 
   const clearHideTimer = useCallback(() => {
     if (hideTimerRef.current) {
@@ -96,14 +105,7 @@ export default function PlayerScreen() {
     setZoomMode('contain');
     setSubtitlesEnabled(true);
 
-    const entry = usePlaybackStore.getState().resumeEntryFor(id);
-    if (entry) {
-      setResumePrompt({ positionSeconds: entry.positionSeconds });
-      usePlaybackStore.getState().pause();
-    } else {
-      setResumePrompt(null);
-      play();
-    }
+    play();
     showControls();
     return clearHideTimer;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -125,11 +127,16 @@ export default function PlayerScreen() {
       return;
     }
     savePosition(video.id, 0, duration);
+    if (!usePlaybackPreferences.getState().autoPlayNext) {
+      usePlaybackStore.getState().pause();
+      showControls();
+      return;
+    }
     const nextId = adjacentVideoId(queue, video.id, 1);
     if (nextId) {
       router.replace(`/player/${nextId}`);
     }
-  }, [video, queue, duration, savePosition, router]);
+  }, [video, queue, duration, savePosition, router, showControls]);
 
   const handleLoad = useCallback((data: OnLoadData) => {
     setDuration(data.duration);
@@ -202,21 +209,6 @@ export default function PlayerScreen() {
     setZoomMode((prev) => ZOOM_CYCLE[(ZOOM_CYCLE.indexOf(prev) + 1) % ZOOM_CYCLE.length]);
   }, []);
 
-  const handleResume = useCallback(() => {
-    setResumePrompt(null);
-    play();
-  }, [play]);
-
-  const handleStartOver = useCallback(() => {
-    if (video) {
-      usePlaybackStore.getState().clearPosition(video.id);
-    }
-    videoRef.current?.seek(0);
-    setCurrentTime(0);
-    setResumePrompt(null);
-    play();
-  }, [video, play]);
-
   const handleBack = useCallback(() => {
     if (video) {
       savePosition(video.id, currentTime, duration);
@@ -227,8 +219,11 @@ export default function PlayerScreen() {
   if (!video) {
     return (
       <View style={styles.center}>
+        <StatusBar hidden={!controlsVisible} animated />
         <Text style={styles.errorText}>This video is no longer in the queue.</Text>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
+        <Pressable
+          style={[styles.backButton, { backgroundColor: accentColor }]}
+          onPress={() => router.back()}>
           <Text style={styles.controlText}>Back to library</Text>
         </Pressable>
       </View>
@@ -240,10 +235,11 @@ export default function PlayerScreen() {
 
   return (
     <View style={styles.container}>
+      <StatusBar hidden={!controlsVisible} animated />
       {errorMessage ? (
         <View style={styles.center}>
           <Text style={styles.errorText}>{errorMessage}</Text>
-          <Pressable style={styles.backButton} onPress={handleBack}>
+          <Pressable style={[styles.backButton, { backgroundColor: accentColor }]} onPress={handleBack}>
             <Text style={styles.controlText}>Back to library</Text>
           </Pressable>
         </View>
@@ -254,7 +250,7 @@ export default function PlayerScreen() {
             ref={videoRef}
             uri={video.uri}
             paused={paused}
-            startPositionSeconds={positionFor(video.id)}
+            startPositionSeconds={resumeBehavior === 'restart' ? 0 : positionFor(video.id)}
             rate={rate}
             loop={loop}
             zoomMode={zoomMode}
@@ -274,11 +270,18 @@ export default function PlayerScreen() {
           ) : (
             <>
               <GestureLayer
+                currentTime={currentTime}
+                duration={duration}
                 onSeekBy={(delta) => {
                   seekBy(delta);
                   showControls();
                 }}
+                onSeekTo={(time) => {
+                  seekTo(time);
+                  showControls();
+                }}
                 onToggleControls={toggleControls}
+                bottomInset={controlsVisible ? BOTTOM_CONTROLS_TOUCH_HEIGHT : 0}
               />
 
               <ControlsOverlay
@@ -327,14 +330,6 @@ export default function PlayerScreen() {
               />
             </>
           )}
-
-          {resumePrompt ? (
-            <ResumePrompt
-              positionSeconds={resumePrompt.positionSeconds}
-              onResume={handleResume}
-              onStartOver={handleStartOver}
-            />
-          ) : null}
         </>
       )}
     </View>
@@ -363,7 +358,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#F97316',
     borderRadius: 8,
   },
   controlText: {

@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { VideoZoomMode } from '@/components/player/VideoPlayer';
+import { useAccentColor } from '@/hooks/useThemePreference';
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -42,6 +43,8 @@ export function MoreOptionsMenu({
   topOffset,
   rightOffset,
 }: MoreOptionsMenuProps) {
+  const accentColor = useAccentColor();
+
   if (!visible) {
     return null;
   }
@@ -55,7 +58,10 @@ export function MoreOptionsMenu({
           {SPEED_OPTIONS.map((option) => (
             <Pressable
               key={option}
-              style={[styles.speedChip, option === rate ? styles.speedChipActive : null]}
+              style={[
+                styles.speedChip,
+                option === rate ? { backgroundColor: accentColor } : null,
+              ]}
               onPress={() => onRateChange(option)}>
               <Text style={[styles.speedChipText, option === rate ? styles.speedChipTextActive : null]}>
                 {option}x
@@ -121,9 +127,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
     backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  speedChipActive: {
-    backgroundColor: '#F97316',
   },
   speedChipText: {
     color: '#fff',

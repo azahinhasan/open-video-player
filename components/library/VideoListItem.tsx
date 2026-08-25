@@ -11,14 +11,14 @@ import { formatTime } from '@/utils/formatTime';
 import { generateThumbnail } from '@/utils/thumbnailCache';
 import { isRecentlyAdded } from '@/utils/videoProperties';
 
-type VideoGridItemProps = {
+type VideoListItemProps = {
   video: VideoAsset;
   onPress: (video: VideoAsset) => void;
   onLongPress?: (video: VideoAsset) => void;
   onMeta: (id: string, patch: Partial<Pick<VideoAsset, 'duration' | 'thumbnailUri'>>) => void;
 };
 
-function VideoGridItemImpl({ video, onPress, onLongPress, onMeta }: VideoGridItemProps) {
+function VideoListItemImpl({ video, onPress, onLongPress, onMeta }: VideoListItemProps) {
   const thumbnailRequested = useRef(false);
   const resumeEntry = usePlaybackStore((s) => s.history[video.id]);
   const accentColor = useAccentColor();
@@ -40,7 +40,7 @@ function VideoGridItemImpl({ video, onPress, onLongPress, onMeta }: VideoGridIte
 
   return (
     <Pressable
-      style={styles.card}
+      style={styles.row}
       onPress={() => onPress(video)}
       onLongPress={onLongPress ? () => onLongPress(video) : undefined}>
       <View style={styles.thumbnailWrap}>
@@ -48,7 +48,7 @@ function VideoGridItemImpl({ video, onPress, onLongPress, onMeta }: VideoGridIte
           <Image source={{ uri: video.thumbnailUri }} style={styles.thumbnail} contentFit="cover" />
         ) : (
           <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
-            <Ionicons name="film-outline" size={28} color="#5a6672" />
+            <Ionicons name="film-outline" size={22} color="#5a6672" />
           </View>
         )}
         {isNew ? (
@@ -69,24 +69,27 @@ function VideoGridItemImpl({ video, onPress, onLongPress, onMeta }: VideoGridIte
           </View>
         ) : null}
       </View>
-      <ThemedText numberOfLines={1} style={styles.filename}>
+      <ThemedText numberOfLines={2} style={styles.filename}>
         {video.filename}
       </ThemedText>
     </Pressable>
   );
 }
 
-export const VideoGridItem = memo(VideoGridItemImpl);
+export const VideoListItem = memo(VideoListItemImpl);
 
 const styles = StyleSheet.create({
-  card: {
-    flex: 1,
-    margin: 6,
-    maxWidth: '47%',
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   thumbnailWrap: {
+    width: 120,
     aspectRatio: 16 / 9,
-    borderRadius: 10,
+    borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#1c1f22',
   },
@@ -100,28 +103,28 @@ const styles = StyleSheet.create({
   },
   durationBadge: {
     position: 'absolute',
-    right: 6,
-    bottom: 6,
+    right: 4,
+    bottom: 4,
     backgroundColor: 'rgba(0,0,0,0.75)',
     borderRadius: 4,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
   },
   durationText: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: 10,
   },
   newBadge: {
     position: 'absolute',
-    left: 6,
-    top: 6,
+    left: 4,
+    top: 4,
     borderRadius: 4,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
   },
   newBadgeText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
   },
   progressTrack: {
@@ -136,8 +139,8 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   filename: {
-    marginTop: 6,
-    fontSize: 13,
+    flex: 1,
+    fontSize: 14,
     fontWeight: '500',
   },
 });

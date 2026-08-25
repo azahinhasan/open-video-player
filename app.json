@@ -4,7 +4,7 @@
     "slug": "video-player-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/icon-1024.png",
     "scheme": "videoplayerappmobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -13,10 +13,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#14171a",
+        "foregroundImage": "./assets/images/adaptive-icon-foreground.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -41,7 +39,16 @@
           }
         }
       ],
-      "react-native-video"
+      "react-native-video",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your videos.",
+          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save videos.",
+          "isAccessMediaLocationEnabled": false,
+          "granularPermissions": ["video"]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

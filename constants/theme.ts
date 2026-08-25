@@ -5,25 +5,32 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#F97316';
-const tintColorDark = '#F97316';
+export const ACCENT_COLORS = {
+  orange: '#F97316',
+  blue: '#3B82F6',
+  green: '#22C55E',
+  purple: '#A855F7',
+} as const;
+
+export type AccentColorKey = keyof typeof ACCENT_COLORS;
+
+export const ACCENT_COLOR_LABELS: Record<AccentColorKey, string> = {
+  orange: 'Orange',
+  blue: 'Blue',
+  green: 'Green',
+  purple: 'Purple',
+};
 
 export const Colors = {
   light: {
     text: '#11181C',
     background: '#fff',
-    tint: tintColorLight,
     icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
   },
   dark: {
     text: '#ECEDEE',
     background: '#151718',
-    tint: tintColorDark,
     icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
   },
 };
 

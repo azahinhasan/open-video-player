@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { useAccentColor } from '@/hooks/useThemePreference';
 
 export type SortMode = 'name' | 'date' | 'duration';
 
@@ -16,12 +17,14 @@ const OPTIONS: { mode: SortMode; label: string }[] = [
 ];
 
 export function SortControl({ mode, onChange }: SortControlProps) {
+  const accentColor = useAccentColor();
+
   return (
     <View style={styles.row}>
       {OPTIONS.map((option) => (
         <Pressable
           key={option.mode}
-          style={[styles.chip, mode === option.mode ? styles.chipActive : null]}
+          style={[styles.chip, mode === option.mode ? { backgroundColor: accentColor } : null]}
           onPress={() => onChange(option.mode)}>
           <ThemedText style={[styles.chipText, mode === option.mode ? styles.chipTextActive : null]}>
             {option.label}
@@ -44,9 +47,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 14,
     backgroundColor: 'rgba(128,128,128,0.15)',
-  },
-  chipActive: {
-    backgroundColor: '#F97316',
   },
   chipText: {
     fontSize: 12,

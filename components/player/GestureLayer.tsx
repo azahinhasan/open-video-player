@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Brightness from 'expo-brightness';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -14,17 +14,39 @@ import Animated, {
 import { VolumeManager } from 'react-native-volume-manager';
 
 import { BrightnessVolumeHUD } from '@/components/player/BrightnessVolumeHUD';
+import { SeekPreviewHUD } from '@/components/player/SeekPreviewHUD';
 
 const COMMIT_INTERVAL_MS = 70;
 const HUD_HIDE_DELAY_MS = 1000;
 const DOUBLE_TAP_MAX_DELAY_MS = 250;
+const SEEK_PIXELS_PER_SECOND = 8;
 
 type GestureLayerProps = {
+  currentTime: number;
+  duration: number;
   onSeekBy: (deltaSeconds: number) => void;
+  onSeekTo: (time: number) => void;
   onToggleControls: () => void;
+  /**
+   * Height, in points, to leave uncovered at the bottom of the screen.
+   * The Chapter Rail lives there and has its own GestureDetector — without
+   * this gap, this component's full-screen zones compete with it for quick
+   * taps (a sustained drag on the rail wins the race easily, but a tap is a
+   * genuine coin flip between the two independent gesture trees). Pass 0
+   * when the bottom bar isn't actually on screen (controls hidden) so this
+   * layer reclaims full-height coverage for tap-to-reveal.
+   */
+  bottomInset?: number;
 };
 
-export function GestureLayer({ onSeekBy, onToggleControls }: GestureLayerProps) {
+export function GestureLayer({
+  currentTime,
+  duration,
+  onSeekBy,
+  onSeekTo,
+  onToggleControls,
+  bottomInset = 0,
+}: GestureLayerProps) {
   const { height } = useWindowDimensions();
 
   const brightnessLevel = useSharedValue(0.5);
@@ -33,6 +55,7 @@ export function GestureLayer({ onSeekBy, onToggleControls }: GestureLayerProps) 
   const volumeOpacity = useSharedValue(0);
   const leftFlashOpacity = useSharedValue(0);
   const rightFlashOpacity = useSharedValue(0);
+  const seekOpacity = useSharedValue(0);
 
   const brightnessRef = useRef(0.5);
   const volumeRef = useRef(0.5);
@@ -40,6 +63,19 @@ export function GestureLayer({ onSeekBy, onToggleControls }: GestureLayerProps) 
   const volumeStartRef = useRef(0.5);
   const lastBrightnessCommitRef = useRef(0);
   const lastVolumeCommitRef = useRef(0);
+
+  const currentTimeRef = useRef(currentTime);
+  const durationRef = useRef(duration);
+  const seekStartRef = useRef(0);
+  const [seekPreview, setSeekPreview] = useState({ targetSeconds: 0, deltaSeconds: 0 });
+
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
+
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
 
   useEffect(() => {
     Brightness.getBrightnessAsync()
@@ -95,6 +131,13 @@ export function GestureLayer({ onSeekBy, onToggleControls }: GestureLayerProps) 
     VolumeManager.setVolume(value, { showUI: false, playSound: false }).catch(() => {});
   }, []);
 
+  const computeSeek = useCallback((translationX: number) => {
+    const delta = translationX / SEEK_PIXELS_PER_SECOND;
+    const maxTime = durationRef.current || Infinity;
+    const target = Math.min(maxTime, Math.max(0, seekStartRef.current + delta));
+    return { target, delta: target - seekStartRef.current };
+  }, []);
+
   const brightnessPan = Gesture.Pan()
     .runOnJS(true)
     .activeOffsetY([-8, 8])
@@ -141,6 +184,32 @@ export function GestureLayer({ onSeekBy, onToggleControls }: GestureLayerProps) 
       hideHudDelayed(volumeOpacity);
     });
 
+  const createSeekPan = () =>
+    Gesture.Pan()
+      .runOnJS(true)
+      .activeOffsetX([-10, 10])
+      .failOffsetY([-24, 24])
+      .onStart(() => {
+        seekStartRef.current = currentTimeRef.current;
+        setSeekPreview({ targetSeconds: currentTimeRef.current, deltaSeconds: 0 });
+        showHud(seekOpacity);
+      })
+      .onUpdate((event) => {
+        const { target, delta } = computeSeek(event.translationX);
+        setSeekPreview({ targetSeconds: target, deltaSeconds: delta });
+      })
+      .onEnd((event, success) => {
+        if (!success) {
+          return;
+        }
+        const { target } = computeSeek(event.translationX);
+        onSeekTo(target);
+        hideHudDelayed(seekOpacity);
+      });
+
+  const leftSeekPan = createSeekPan();
+  const rightSeekPan = createSeekPan();
+
   const leftDoubleTap = Gesture.Tap()
     .runOnJS(true)
     .numberOfTaps(2)
@@ -175,14 +244,22 @@ export function GestureLayer({ onSeekBy, onToggleControls }: GestureLayerProps) 
       onToggleControls();
     });
 
-  const leftZoneGesture = Gesture.Race(brightnessPan, Gesture.Exclusive(leftDoubleTap, singleTap));
-  const rightZoneGesture = Gesture.Race(volumePan, Gesture.Exclusive(rightDoubleTap, singleTap));
+  const leftZoneGesture = Gesture.Race(
+    brightnessPan,
+    leftSeekPan,
+    Gesture.Exclusive(leftDoubleTap, singleTap)
+  );
+  const rightZoneGesture = Gesture.Race(
+    volumePan,
+    rightSeekPan,
+    Gesture.Exclusive(rightDoubleTap, singleTap)
+  );
 
   const leftFlashStyle = useAnimatedStyle(() => ({ opacity: leftFlashOpacity.value }));
   const rightFlashStyle = useAnimatedStyle(() => ({ opacity: rightFlashOpacity.value }));
 
   return (
-    <View style={styles.root} pointerEvents="box-none">
+    <View style={[styles.root, { bottom: bottomInset }]} pointerEvents="box-none">
       <GestureDetector gesture={leftZoneGesture}>
         <View style={styles.zone}>
           <Animated.View style={[styles.flash, leftFlashStyle]} pointerEvents="none">
@@ -211,6 +288,11 @@ export function GestureLayer({ onSeekBy, onToggleControls }: GestureLayerProps) 
         icon="volume-high"
         level={volumeLevel}
         opacity={volumeOpacity}
+      />
+      <SeekPreviewHUD
+        opacity={seekOpacity}
+        targetSeconds={seekPreview.targetSeconds}
+        deltaSeconds={seekPreview.deltaSeconds}
       />
     </View>
   );
