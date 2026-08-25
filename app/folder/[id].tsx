@@ -7,6 +7,7 @@ import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 're
 import { ActionMenu, type ActionMenuOption } from '@/components/library/ActionMenu';
 import { DeleteConfirmSheet } from '@/components/library/DeleteConfirmSheet';
 import { PropertiesSheet, type PropertyRow } from '@/components/library/PropertiesSheet';
+import { RenameSheet } from '@/components/library/RenameSheet';
 import { SortControl } from '@/components/library/SortControl';
 import { VideoGridItem } from '@/components/library/VideoGridItem';
 import { VideoListItem } from '@/components/library/VideoListItem';
@@ -21,6 +22,7 @@ import { useViewMode } from '@/hooks/useViewMode';
 import type { VideoAsset } from '@/types/video';
 import { formatTime } from '@/utils/formatTime';
 import { formatDate, formatFileSize, getFileDirectory, getFileSize } from '@/utils/videoProperties';
+import { renameVideoAsync } from '@/utils/renameVideo';
 
 function sortVideos(videos: VideoAsset[], mode: SortMode): VideoAsset[] {
   const sorted = [...videos];
@@ -52,6 +54,7 @@ export default function FolderScreen() {
   const router = useRouter();
   const [actionMenuVideo, setActionMenuVideo] = useState<VideoAsset | null>(null);
   const [propertiesVideo, setPropertiesVideo] = useState<VideoAsset | null>(null);
+  const [renameVideo, setRenameVideo] = useState<VideoAsset | null>(null);
   const [deleteVideo, setDeleteVideo] = useState<VideoAsset | null>(null);
   const [batchDeleteVisible, setBatchDeleteVisible] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
@@ -95,6 +98,23 @@ export default function FolderScreen() {
     setSelectedIds(allSelected ? new Set() : new Set(videos.map((v) => v.id)));
   }, [allSelected, videos]);
 
+  const handleConfirmRename = useCallback(
+    async (newBaseName: string) => {
+      if (!renameVideo) {
+        return;
+      }
+      const target = renameVideo;
+      setRenameVideo(null);
+      const result = await renameVideoAsync(target.id, target.filename, newBaseName);
+      if (result) {
+        updateVideoMeta(target.id, { filename: result.filename, uri: result.uri });
+      } else {
+        Alert.alert("Couldn't rename", 'The file was not renamed. Please try again.');
+      }
+    },
+    [renameVideo, updateVideoMeta]
+  );
+
   const handleConfirmDelete = useCallback(async () => {
     if (!deleteVideo) {
       return;
@@ -129,6 +149,12 @@ export default function FolderScreen() {
           label: 'Select',
           icon: 'checkmark-circle-outline',
           onPress: () => enterSelectMode(actionMenuVideo),
+        },
+        {
+          key: 'rename',
+          label: 'Rename',
+          icon: 'pencil-outline',
+          onPress: () => setRenameVideo(actionMenuVideo),
         },
         {
           key: 'properties',
@@ -278,6 +304,13 @@ export default function FolderScreen() {
         title="Video properties"
         rows={propertyRows}
         onClose={() => setPropertiesVideo(null)}
+      />
+
+      <RenameSheet
+        visible={renameVideo !== null}
+        currentFilename={renameVideo?.filename ?? ''}
+        onCancel={() => setRenameVideo(null)}
+        onConfirm={handleConfirmRename}
       />
 
       <DeleteConfirmSheet

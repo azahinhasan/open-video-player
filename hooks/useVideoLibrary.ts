@@ -95,7 +95,10 @@ type VideoLibraryStoreState = {
   init: () => void;
   requestAccess: () => Promise<void>;
   rescan: (options?: { silent?: boolean }) => Promise<void>;
-  updateVideoMeta: (id: string, patch: Partial<Pick<VideoAsset, 'duration' | 'thumbnailUri'>>) => void;
+  updateVideoMeta: (
+    id: string,
+    patch: Partial<Pick<VideoAsset, 'duration' | 'thumbnailUri' | 'filename' | 'uri'>>
+  ) => void;
   deleteVideos: (ids: string[]) => Promise<boolean>;
 };
 

@@ -45,3 +45,9 @@ designplan.md
 # generated native folders
 /ios
 /android
+
+# local Expo module build artifacts (source under modules/*/android/src is still tracked)
+modules/*/android/build/
+modules/*/android/.cxx/
+modules/*/android/.gradle/
+modules/*/ios/build/

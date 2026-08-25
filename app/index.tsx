@@ -1,20 +1,34 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Stack, useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
-import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { Stack, useRouter } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  View,
+} from "react-native";
 
-import { ActionMenu, type ActionMenuOption } from '@/components/library/ActionMenu';
-import { DeleteConfirmSheet } from '@/components/library/DeleteConfirmSheet';
-import { FolderListItem } from '@/components/library/FolderListItem';
-import { PermissionGate } from '@/components/library/PermissionGate';
-import { PropertiesSheet, type PropertyRow } from '@/components/library/PropertiesSheet';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { useAccentColor } from '@/hooks/useThemePreference';
-import { useVideoLibrary } from '@/hooks/useVideoLibrary';
-import type { VideoFolder } from '@/types/video';
-import { formatTime } from '@/utils/formatTime';
+import {
+  ActionMenu,
+  type ActionMenuOption,
+} from "@/components/library/ActionMenu";
+import { DeleteConfirmSheet } from "@/components/library/DeleteConfirmSheet";
+import { FolderListItem } from "@/components/library/FolderListItem";
+import { PermissionGate } from "@/components/library/PermissionGate";
+import {
+  PropertiesSheet,
+  type PropertyRow,
+} from "@/components/library/PropertiesSheet";
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { useAccentColor } from "@/hooks/useThemePreference";
+import { useVideoLibrary } from "@/hooks/useVideoLibrary";
+import type { VideoFolder } from "@/types/video";
+import { formatTime } from "@/utils/formatTime";
 
 export default function LibraryScreen() {
   const {
@@ -31,15 +45,19 @@ export default function LibraryScreen() {
   } = useVideoLibrary();
   const accentColor = useAccentColor();
   const router = useRouter();
-  const [actionMenuFolder, setActionMenuFolder] = useState<VideoFolder | null>(null);
-  const [propertiesFolder, setPropertiesFolder] = useState<VideoFolder | null>(null);
+  const [actionMenuFolder, setActionMenuFolder] = useState<VideoFolder | null>(
+    null,
+  );
+  const [propertiesFolder, setPropertiesFolder] = useState<VideoFolder | null>(
+    null,
+  );
   const [deleteFolder, setDeleteFolder] = useState<VideoFolder | null>(null);
 
   const handleOpenFolder = useCallback(
     (folder: VideoFolder) => {
       router.push(`/folder/${folder.id}`);
     },
-    [router]
+    [router],
   );
 
   const handleConfirmDeleteFolder = useCallback(async () => {
@@ -51,40 +69,48 @@ export default function LibraryScreen() {
     setDeleteFolder(null);
     const success = await deleteVideos(folderVideos.map((v) => v.id));
     if (!success) {
-      Alert.alert("Couldn't delete", 'The folder was not fully deleted. Please try again.');
+      Alert.alert(
+        "Couldn't delete",
+        "The folder was not fully deleted. Please try again.",
+      );
     }
   }, [deleteFolder, videosForFolder, deleteVideos]);
 
   const actionMenuOptions: ActionMenuOption[] = actionMenuFolder
     ? [
         {
-          key: 'properties',
-          label: 'Properties',
-          icon: 'information-circle-outline',
+          key: "properties",
+          label: "Properties",
+          icon: "information-circle-outline",
           onPress: () => setPropertiesFolder(actionMenuFolder),
         },
         {
-          key: 'delete',
-          label: 'Delete all videos',
-          icon: 'trash-outline',
+          key: "delete",
+          label: "Delete all videos",
+          icon: "trash-outline",
           destructive: true,
           onPress: () => setDeleteFolder(actionMenuFolder),
         },
       ]
     : [];
 
-  const deleteFolderVideoCount = deleteFolder ? videosForFolder(deleteFolder.id).length : 0;
+  const deleteFolderVideoCount = deleteFolder
+    ? videosForFolder(deleteFolder.id).length
+    : 0;
 
   const propertyRows: PropertyRow[] = useMemo(() => {
     if (!propertiesFolder) {
       return [];
     }
     const folderVideos = videosForFolder(propertiesFolder.id);
-    const totalDuration = folderVideos.reduce((sum, v) => sum + (v.duration ?? 0), 0);
+    const totalDuration = folderVideos.reduce(
+      (sum, v) => sum + (v.duration ?? 0),
+      0,
+    );
     return [
-      { label: 'Name', value: propertiesFolder.name },
-      { label: 'Videos', value: String(propertiesFolder.videoCount) },
-      { label: 'Total duration', value: formatTime(totalDuration) },
+      { label: "Name", value: propertiesFolder.name },
+      { label: "Videos", value: String(propertiesFolder.videoCount) },
+      { label: "Total duration", value: formatTime(totalDuration) },
     ];
   }, [propertiesFolder, videosForFolder]);
 
@@ -96,10 +122,10 @@ export default function LibraryScreen() {
             {backgroundScanning ? (
               <ActivityIndicator size="small" color={accentColor} />
             ) : null}
-            <Pressable onPress={() => router.push('/search')} hitSlop={12}>
+            <Pressable onPress={() => router.push("/search")} hitSlop={12}>
               <Ionicons name="search-outline" size={22} color={accentColor} />
             </Pressable>
-            <Pressable onPress={() => router.push('/settings')} hitSlop={12}>
+            <Pressable onPress={() => router.push("/settings")} hitSlop={12}>
               <Ionicons name="settings-outline" size={22} color={accentColor} />
             </Pressable>
           </View>
@@ -108,12 +134,16 @@ export default function LibraryScreen() {
     />
   );
 
-  if (status === 'needs-permission' || status === 'denied' || (status === 'error' && videos.length === 0)) {
+  if (
+    status === "needs-permission" ||
+    status === "denied" ||
+    (status === "error" && videos.length === 0)
+  ) {
     return (
       <ThemedView style={styles.container}>
         {settingsButton}
         <PermissionGate
-          status={status === 'error' ? 'error' : status}
+          status={status === "error" ? "error" : status}
           canAskAgain={canAskAgain}
           errorMessage={error}
           onRequestAccess={requestAccess}
@@ -125,16 +155,20 @@ export default function LibraryScreen() {
   return (
     <ThemedView style={styles.container}>
       {settingsButton}
-      {(status === 'checking-permission' || status === 'scanning') && videos.length === 0 ? (
+      {(status === "checking-permission" || status === "scanning") &&
+      videos.length === 0 ? (
         <View style={styles.center}>
-          <ActivityIndicator />
-          <ThemedText style={styles.centerText}>Scanning your device for videos…</ThemedText>
+          <ThemedText style={styles.centerText}>
+            Scanning your device for videos…
+          </ThemedText>
         </View>
       ) : null}
 
-      {status === 'ready' && folders.length === 0 ? (
+      {status === "ready" && folders.length === 0 ? (
         <View style={styles.center}>
-          <ThemedText style={styles.centerText}>No videos found on this device.</ThemedText>
+          <ThemedText style={styles.centerText}>
+            No videos found on this device.
+          </ThemedText>
         </View>
       ) : null}
 
@@ -144,20 +178,24 @@ export default function LibraryScreen() {
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl
-            refreshing={status === 'scanning'}
+            refreshing={status === "scanning"}
             onRefresh={rescan}
             tintColor={accentColor}
             colors={[accentColor]}
           />
         }
         renderItem={({ item }) => (
-          <FolderListItem folder={item} onPress={handleOpenFolder} onLongPress={setActionMenuFolder} />
+          <FolderListItem
+            folder={item}
+            onPress={handleOpenFolder}
+            onLongPress={setActionMenuFolder}
+          />
         )}
       />
 
       <ActionMenu
         visible={actionMenuFolder !== null}
-        title={actionMenuFolder?.name ?? ''}
+        title={actionMenuFolder?.name ?? ""}
         options={actionMenuOptions}
         onClose={() => setActionMenuFolder(null)}
       />
@@ -171,8 +209,8 @@ export default function LibraryScreen() {
 
       <DeleteConfirmSheet
         visible={deleteFolder !== null}
-        title={deleteFolder?.name ?? ''}
-        subtitle={`${deleteFolderVideoCount} video${deleteFolderVideoCount === 1 ? '' : 's'}`}
+        title={deleteFolder?.name ?? ""}
+        subtitle={`${deleteFolderVideoCount} video${deleteFolderVideoCount === 1 ? "" : "s"}`}
         thumbnailUri={deleteFolder?.thumbnailUri}
         confirmLabel="Delete all"
         onCancel={() => setDeleteFolder(null)}
@@ -190,19 +228,19 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   center: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 48,
     gap: 8,
     paddingHorizontal: 24,
   },
   centerText: {
-    textAlign: 'center',
+    textAlign: "center",
     opacity: 0.7,
   },
   headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 16,
   },
 });

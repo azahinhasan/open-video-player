@@ -1,0 +1,9 @@
+{
+  "name": "media-rename",
+  "version": "1.0.0",
+  "description": "Local Expo module: renames a MediaStore video asset's display name, requesting write consent via MediaStore.createWriteRequest when needed.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "license": "UNLICENSED",
+  "private": true
+}
