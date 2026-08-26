@@ -15,7 +15,7 @@ type PropertiesSheetProps = {
 
 export function PropertiesSheet({ visible, title, rows, onClose }: PropertiesSheetProps) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <View style={styles.headerRow}>

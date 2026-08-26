@@ -80,7 +80,6 @@ export default function FolderScreen() {
   const setSortMode = useSortPreference((s) => s.setSortMode);
   const accentColor = useAccentColor();
   const mutedColor = useThemeColor({}, "textMuted");
-  const dangerColor = useThemeColor({}, "danger");
   const router = useRouter();
   const [actionMenuVideo, setActionMenuVideo] = useState<VideoAsset | null>(
     null,
@@ -365,7 +364,7 @@ export default function FolderScreen() {
                   <Ionicons
                     name="trash-outline"
                     size={22}
-                    color={selectedIds.size === 0 ? mutedColor : dangerColor}
+                    color={selectedIds.size === 0 ? mutedColor : accentColor}
                   />
                 </Pressable>
               </View>
@@ -480,7 +479,6 @@ export default function FolderScreen() {
         visible={vaultVideo !== null}
         title={vaultVideo?.filename ?? ""}
         thumbnailUri={vaultVideo?.thumbnailUri}
-        tone="accent"
         confirmLabel="Move to Vault"
         warningText="This removes the file and its listing from your gallery and other apps. It stays on your device, only playable here, behind your Vault lock."
         onCancel={() => setVaultVideo(null)}
@@ -496,7 +494,6 @@ export default function FolderScreen() {
             : (batchVaultFirstVideo?.filename ?? undefined)
         }
         thumbnailUri={batchVaultFirstVideo?.thumbnailUri}
-        tone="accent"
         confirmLabel="Move to Vault"
         warningText="These files are removed from your gallery and other apps. They stay on your device, only playable here, behind your Vault lock."
         onCancel={() => setBatchVaultVisible(false)}

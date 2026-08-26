@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { memo, useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated, { FadeIn, FadeOut, LinearTransition, ZoomIn, ZoomOut } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
 import { usePlaybackStore } from '@/hooks/usePlaybackStore';
@@ -51,45 +52,50 @@ function VideoGridItemImpl({
   }, [video.id, video.thumbnailUri, video.uri, onMeta]);
 
   return (
-    <Pressable
-      style={styles.card}
-      onPress={() => (selectable ? onToggleSelect?.(video) : onPress(video))}
-      onLongPress={selectable ? undefined : onLongPress ? () => onLongPress(video) : undefined}>
-      <View style={styles.thumbnailWrap}>
-        {video.thumbnailUri ? (
-          <Image source={{ uri: video.thumbnailUri }} style={styles.thumbnail} contentFit="cover" />
-        ) : (
-          <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
-            <Ionicons name="film-outline" size={28} color="#5a6672" />
-          </View>
-        )}
-        {selectable ? (
-          <View style={[styles.checkCircle, selected ? { backgroundColor: accentColor, borderColor: accentColor } : null]}>
-            {selected ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
-          </View>
-        ) : null}
-        {isNew ? (
-          <View style={[styles.newBadge, { backgroundColor: accentColor }]}>
-            <ThemedText style={styles.newBadgeText}>NEW</ThemedText>
-          </View>
-        ) : null}
-        {video.duration !== null ? (
-          <View style={styles.durationBadge}>
-            <ThemedText style={styles.durationText}>{formatTime(video.duration)}</ThemedText>
-          </View>
-        ) : null}
-        {resumeProgress > 0 ? (
-          <View style={styles.progressTrack}>
-            <View
-              style={[styles.progressFill, { width: `${resumeProgress * 100}%`, backgroundColor: accentColor }]}
-            />
-          </View>
-        ) : null}
-      </View>
-      <ThemedText numberOfLines={1} style={styles.filename}>
-        {video.filename}
-      </ThemedText>
-    </Pressable>
+    <Animated.View style={styles.card} entering={FadeIn} exiting={FadeOut.duration(200)} layout={LinearTransition.duration(220)}>
+      <Pressable
+        style={styles.pressable}
+        onPress={() => (selectable ? onToggleSelect?.(video) : onPress(video))}
+        onLongPress={selectable ? undefined : onLongPress ? () => onLongPress(video) : undefined}>
+        <View style={styles.thumbnailWrap}>
+          {video.thumbnailUri ? (
+            <Image source={{ uri: video.thumbnailUri }} style={styles.thumbnail} contentFit="cover" />
+          ) : (
+            <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
+              <Ionicons name="film-outline" size={28} color="#5a6672" />
+            </View>
+          )}
+          {selectable ? (
+            <Animated.View
+              entering={ZoomIn.duration(150)}
+              exiting={ZoomOut.duration(150)}
+              style={[styles.checkCircle, selected ? { backgroundColor: accentColor, borderColor: accentColor } : null]}>
+              {selected ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
+            </Animated.View>
+          ) : null}
+          {isNew ? (
+            <View style={[styles.newBadge, { backgroundColor: accentColor }]}>
+              <ThemedText style={styles.newBadgeText}>NEW</ThemedText>
+            </View>
+          ) : null}
+          {video.duration !== null ? (
+            <View style={styles.durationBadge}>
+              <ThemedText style={styles.durationText}>{formatTime(video.duration)}</ThemedText>
+            </View>
+          ) : null}
+          {resumeProgress > 0 ? (
+            <View style={styles.progressTrack}>
+              <View
+                style={[styles.progressFill, { width: `${resumeProgress * 100}%`, backgroundColor: accentColor }]}
+              />
+            </View>
+          ) : null}
+        </View>
+        <ThemedText numberOfLines={1} style={styles.filename}>
+          {video.filename}
+        </ThemedText>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -100,6 +106,9 @@ const styles = StyleSheet.create({
     flex: 1,
     margin: 6,
     maxWidth: '47%',
+  },
+  pressable: {
+    flex: 1,
   },
   thumbnailWrap: {
     aspectRatio: 16 / 9,

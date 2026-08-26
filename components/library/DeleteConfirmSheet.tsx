@@ -12,8 +12,6 @@ type DeleteConfirmSheetProps = {
   subtitle?: string;
   thumbnailUri?: string | null;
   confirmLabel?: string;
-  /** 'accent' is used for non-destructive-but-consequential actions, e.g. moving to the Vault. Defaults to 'danger'. */
-  tone?: 'danger' | 'accent';
   warningText?: string;
   onCancel: () => void;
   onConfirm: () => void;
@@ -25,7 +23,6 @@ export function DeleteConfirmSheet({
   subtitle,
   thumbnailUri,
   confirmLabel = 'Delete',
-  tone = 'danger',
   warningText = "This can't be undone.",
   onCancel,
   onConfirm,
@@ -34,12 +31,10 @@ export function DeleteConfirmSheet({
   const borderColor = useThemeColor({}, 'surfaceBorder');
   const textColor = useThemeColor({}, 'text');
   const mutedColor = useThemeColor({}, 'textMuted');
-  const dangerColor = useThemeColor({}, 'danger');
-  const accentColor = useAccentColor();
-  const confirmColor = tone === 'accent' ? accentColor : dangerColor;
+  const confirmColor = useAccentColor();
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <Pressable style={styles.backdrop} onPress={onCancel}>
         <Pressable
           style={[styles.sheet, { backgroundColor: surfaceColor, borderColor }]}

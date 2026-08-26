@@ -2,7 +2,7 @@
   "expo": {
     "name": "Open Video Player",
     "slug": "video-player-app",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/splash-icon-tomato-2048.png",
     "scheme": "videoplayerappmobile",

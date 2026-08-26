@@ -16,7 +16,9 @@ import { usePlaybackPreferences } from '@/hooks/usePlaybackPreferences';
 import { useAccentColor, useThemePreference } from '@/hooks/useThemePreference';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useVaultAuthStore } from '@/hooks/useVaultAuthStore';
+import { PinGatedSwitch } from '@/components/settings/PinGatedSwitch';
 import { PinSetupSheet } from '@/components/vault/PinSetupSheet';
+import { VerifyPinSheet } from '@/components/vault/VerifyPinSheet';
 import { radius, spacing, typography } from '@/theme/tokens';
 import type { ControlsLayout, ResumeBehavior } from '@/utils/playbackPreferences';
 import type { ThemeMode } from '@/utils/themePreference';
@@ -111,10 +113,30 @@ export default function SettingsScreen() {
   const setVaultBiometricsEnabled = useVaultAuthStore((s) => s.setBiometricsEnabled);
   const vaultAuthInit = useVaultAuthStore((s) => s.init);
   const [pinSheetVisible, setPinSheetVisible] = useState(false);
+  // Holds the toggle's requested value while its PIN check is pending —
+  // applied only once verified, so the Switch (bound to the real
+  // vaultBiometricsEnabled value) just snaps back on its own if cancelled.
+  const [pendingBiometricsValue, setPendingBiometricsValue] = useState<boolean | null>(null);
 
   useEffect(() => {
     vaultAuthInit();
   }, [vaultAuthInit]);
+
+  const handleBiometricsToggle = (next: boolean) => {
+    if (!hasVaultPin) {
+      // Nothing to protect yet — no PIN exists for anyone to have bypassed.
+      setVaultBiometricsEnabled(next);
+      return;
+    }
+    setPendingBiometricsValue(next);
+  };
+
+  const handleBiometricsVerified = () => {
+    if (pendingBiometricsValue !== null) {
+      setVaultBiometricsEnabled(pendingBiometricsValue);
+    }
+    setPendingBiometricsValue(null);
+  };
 
   const isPreset = ACCENT_KEYS.some((key) => ACCENT_COLORS[key].toLowerCase() === accent.toLowerCase());
 
@@ -219,11 +241,10 @@ export default function SettingsScreen() {
           />
           <ThemedText style={styles.rowLabel}>Unlock with biometrics</ThemedText>
           <View style={styles.rowSpacer} />
-          <Switch
+          <PinGatedSwitch
             value={vaultBiometricsEnabled}
-            onValueChange={setVaultBiometricsEnabled}
-            trackColor={{ false: 'rgba(128,128,128,0.3)', true: accentColor }}
-            thumbColor="#fff"
+            onPress={() => handleBiometricsToggle(!vaultBiometricsEnabled)}
+            activeColor={accentColor}
           />
         </View>
         {vaultBiometricsEnabled && !vaultBiometricsAvailable ? (
@@ -250,6 +271,12 @@ export default function SettingsScreen() {
         visible={pinSheetVisible}
         onCancel={() => setPinSheetVisible(false)}
         onDone={() => setPinSheetVisible(false)}
+      />
+
+      <VerifyPinSheet
+        visible={pendingBiometricsValue !== null}
+        onCancel={() => setPendingBiometricsValue(null)}
+        onVerified={handleBiometricsVerified}
       />
 
       <CustomColorSheet

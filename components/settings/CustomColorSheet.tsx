@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
@@ -97,45 +97,56 @@ export function CustomColorSheet({ visible, initialColor, onCancel, onConfirm }:
   );
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <Pressable style={styles.backdrop} onPress={onCancel}>
-        <Pressable
-          style={[styles.sheet, { backgroundColor: surfaceColor, borderColor }]}
-          onPress={(e) => e.stopPropagation()}>
-          <View style={styles.handle} />
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+      {/*
+        Modal content renders in its own native window on Android, outside
+        the reach of the app-level GestureHandlerRootView in app/_layout.tsx
+        — without a RootView of its own here, the sliders' GestureDetectors
+        never receive touches at all (they just don't move, not glitch).
+      */}
+      <GestureHandlerRootView style={styles.flexFill}>
+        <Pressable style={styles.backdrop} onPress={onCancel}>
+          <Pressable
+            style={[styles.sheet, { backgroundColor: surfaceColor, borderColor }]}
+            onPress={(e) => e.stopPropagation()}>
+            <View style={styles.handle} />
 
-          <View style={styles.previewRow}>
-            <View style={[styles.previewDot, { backgroundColor: previewHex }]} />
-            <ThemedText style={styles.previewHex}>{previewHex.toUpperCase()}</ThemedText>
-          </View>
+            <View style={styles.previewRow}>
+              <View style={[styles.previewDot, { backgroundColor: previewHex }]} />
+              <ThemedText style={styles.previewHex}>{previewHex.toUpperCase()}</ThemedText>
+            </View>
 
-          <ThemedText style={styles.sliderLabel}>Hue</ThemedText>
-          <GradientSlider colors={HUE_STRIPS} value={hue / 360} onChange={(f) => setHue(Math.round(f * 360))} />
+            <ThemedText style={styles.sliderLabel}>Hue</ThemedText>
+            <GradientSlider colors={HUE_STRIPS} value={hue / 360} onChange={(f) => setHue(Math.round(f * 360))} />
 
-          <ThemedText style={styles.sliderLabel}>Saturation</ThemedText>
-          <GradientSlider
-            colors={saturationStrips}
-            value={saturation / 100}
-            onChange={(f) => setSaturation(Math.round(f * 100))}
-          />
+            <ThemedText style={styles.sliderLabel}>Saturation</ThemedText>
+            <GradientSlider
+              colors={saturationStrips}
+              value={saturation / 100}
+              onChange={(f) => setSaturation(Math.round(f * 100))}
+            />
 
-          <View style={styles.actionsRow}>
-            <Pressable style={styles.cancelButton} onPress={onCancel}>
-              <ThemedText style={styles.cancelLabel}>Cancel</ThemedText>
-            </Pressable>
-            <Pressable
-              style={[styles.confirmButton, { backgroundColor: previewHex }]}
-              onPress={() => onConfirm(previewHex)}>
-              <Text style={styles.confirmLabel}>Use this color</Text>
-            </Pressable>
-          </View>
+            <View style={styles.actionsRow}>
+              <Pressable style={styles.cancelButton} onPress={onCancel}>
+                <ThemedText style={styles.cancelLabel}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmButton, { backgroundColor: previewHex }]}
+                onPress={() => onConfirm(previewHex)}>
+                <Text style={styles.confirmLabel}>Use this color</Text>
+              </Pressable>
+            </View>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  flexFill: {
+    flex: 1,
+  },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

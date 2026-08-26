@@ -34,7 +34,6 @@ export default function VaultScreen() {
   const { viewMode, toggleViewMode } = useViewMode();
   const accentColor = useAccentColor();
   const mutedColor = useThemeColor({}, 'textMuted');
-  const dangerColor = useThemeColor({}, 'danger');
   const router = useRouter();
 
   const [actionMenuVideo, setActionMenuVideo] = useState<VideoAsset | null>(null);
@@ -236,7 +235,7 @@ export default function VaultScreen() {
                   <Ionicons
                     name="trash-outline"
                     size={22}
-                    color={selectedIds.size === 0 ? mutedColor : dangerColor}
+                    color={selectedIds.size === 0 ? mutedColor : accentColor}
                   />
                 </Pressable>
               </View>
@@ -308,7 +307,6 @@ export default function VaultScreen() {
         visible={unvaultVideo !== null}
         title={unvaultVideo?.filename ?? ''}
         thumbnailUri={unvaultVideo?.thumbnailUri}
-        tone="accent"
         confirmLabel="Remove from Vault"
         warningText="This copies the file back to shared storage — visible again in your gallery and other apps."
         onCancel={() => setUnvaultVideo(null)}
@@ -334,7 +332,6 @@ export default function VaultScreen() {
             : (batchFirstVideo?.filename ?? undefined)
         }
         thumbnailUri={batchFirstVideo?.thumbnailUri}
-        tone="accent"
         confirmLabel="Remove from Vault"
         warningText="These files are copied back to shared storage — visible again in your gallery and other apps."
         onCancel={() => setBatchUnvaultVisible(false)}

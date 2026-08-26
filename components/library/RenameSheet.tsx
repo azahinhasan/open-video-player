@@ -82,7 +82,7 @@ export function RenameSheet({ visible, currentFilename, onCancel, onConfirm }: R
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="slide"
       onRequestClose={onCancel}
       // A short delay here lets the modal's own fade-in settle before focus
       // is requested, so the keyboard reliably opens on the first tap

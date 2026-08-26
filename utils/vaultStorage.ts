@@ -37,8 +37,6 @@ function vaultDirectory(): Directory {
   return dir;
 }
 
-const RESTORE_FALLBACK_ALBUM_NAME = 'DCIM';
-
 /**
  * Scratch directory for un-vaulting only — holds a short-lived copy of a
  * vault file under its ORIGINAL filename (see moveOutOfVault) so
@@ -55,28 +53,25 @@ function restoreTempDirectory(): Directory {
 }
 
 /**
- * Finds the album (folder) a restored video should land in: the one it was
- * originally vaulted from, if that folder still exists, otherwise DCIM as a
- * standard, always-present fallback. Deliberately never creates/recreates
- * the original folder — createAssetAsync requires the target album to
- * already exist, and conjuring a new folder that may no longer mean
- * anything to the user (its last video may have been the one now returning)
- * isn't the same guarantee as "it went back where it came from".
+ * Places a just-restored asset back into the folder it was vaulted from —
+ * moving it into that album if it still exists, or recreating the album
+ * fresh with this video as its first member if not (Android drops a
+ * folder's own album listing once nothing indexed inside it is left, which
+ * is exactly what happens when the video being un-vaulted was that folder's
+ * last remaining one). Best-effort: on any failure the asset still exists
+ * safely wherever createAssetAsync's own default landed it, just not
+ * reorganized into the original folder.
  */
-async function findRestoreAlbum(originalFolder: string): Promise<MediaLibrary.Album | undefined> {
+async function ensureAssetInOriginalFolder(asset: MediaLibrary.Asset, originalFolder: string): Promise<void> {
   try {
-    const original = await MediaLibrary.getAlbumAsync(originalFolder);
-    if (original) {
-      return original;
+    const existingAlbum = await MediaLibrary.getAlbumAsync(originalFolder);
+    if (existingAlbum) {
+      await MediaLibrary.addAssetsToAlbumAsync([asset], existingAlbum, false);
+      return;
     }
+    await MediaLibrary.createAlbumAsync(originalFolder, asset, false);
   } catch {
-    // Fall through to the DCIM fallback below.
-  }
-  try {
-    const fallback = await MediaLibrary.getAlbumAsync(RESTORE_FALLBACK_ALBUM_NAME);
-    return fallback ?? undefined;
-  } catch {
-    return undefined;
+    // Best-effort — see doc comment above.
   }
 }
 
@@ -342,9 +337,10 @@ export type MoveOutOfVaultResult = { ok: true } | { ok: false; reason: 'create-f
 
 /**
  * Reverses moveToVault: writes the file back into shared storage under its
- * ORIGINAL filename (re-indexed into MediaStore via createAssetAsync, into
- * the folder it was vaulted from if that still exists, else DCIM), then
- * removes the private copy + index entry. Only deletes the vault copy after
+ * ORIGINAL filename (re-indexed into MediaStore via createAssetAsync), then
+ * moves it back into the folder it was vaulted from — recreating that
+ * folder if it's gone (see ensureAssetInOriginalFolder) — then removes the
+ * private copy + index entry. Only deletes the vault copy after
  * createAssetAsync succeeds, so a crash mid-restore never loses the video —
  * at worst it can be retried.
  */
@@ -364,8 +360,7 @@ export async function moveOutOfVault(entry: VaultEntry): Promise<MoveOutOfVaultR
       tempFile.delete();
     }
     vaultFileFor(entry).copy(tempFile);
-    const album = await findRestoreAlbum(entry.originalFolder);
-    asset = await MediaLibrary.createAssetAsync(tempFile.uri, album);
+    asset = await MediaLibrary.createAssetAsync(tempFile.uri);
   } catch {
     asset = null;
   } finally {
@@ -379,6 +374,10 @@ export async function moveOutOfVault(entry: VaultEntry): Promise<MoveOutOfVaultR
     return { ok: false, reason: 'create-failed' };
   }
 
+  // Journaled as 'restored' immediately once the asset exists — the
+  // irreversible, data-loss-risking step is done. Placing it into the right
+  // folder below is a best-effort reorganization on top of an already-safe
+  // asset, not something recovery needs to worry about getting right.
   writeSinglePendingOp({
     kind: 'vault-out',
     stage: 'restored',
@@ -386,6 +385,8 @@ export async function moveOutOfVault(entry: VaultEntry): Promise<MoveOutOfVaultR
     restoredAssetId: asset.id,
     startedAt: Date.now(),
   });
+
+  await ensureAssetInOriginalFolder(asset, entry.originalFolder);
 
   deleteVaultFiles(entry);
   writeVaultIndex(readVaultIndex().filter((e) => e.id !== entry.id));

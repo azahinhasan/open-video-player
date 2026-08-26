@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
 import { useAccentColor } from '@/hooks/useThemePreference';
@@ -16,27 +17,29 @@ export function FolderListItem({ folder, onPress, onLongPress }: FolderListItemP
   const accentColor = useAccentColor();
 
   return (
-    <Pressable
-      style={styles.row}
-      onPress={() => onPress(folder)}
-      onLongPress={onLongPress ? () => onLongPress(folder) : undefined}>
-      <View style={styles.iconWrap}>
-        {folder.thumbnailUri ? (
-          <Image source={{ uri: folder.thumbnailUri }} style={styles.thumbnail} contentFit="cover" />
-        ) : (
-          <Ionicons name="folder-outline" size={26} color={accentColor} />
-        )}
-      </View>
-      <View style={styles.textWrap}>
-        <ThemedText numberOfLines={1} style={styles.name}>
-          {folder.name}
-        </ThemedText>
-        <ThemedText style={styles.count}>
-          {folder.videoCount} {folder.videoCount === 1 ? 'video' : 'videos'}
-        </ThemedText>
-      </View>
-      <Ionicons name="chevron-forward" size={20} color="#888" />
-    </Pressable>
+    <Animated.View entering={FadeIn} exiting={FadeOut.duration(200)} layout={LinearTransition.duration(220)}>
+      <Pressable
+        style={styles.row}
+        onPress={() => onPress(folder)}
+        onLongPress={onLongPress ? () => onLongPress(folder) : undefined}>
+        <View style={styles.iconWrap}>
+          {folder.thumbnailUri ? (
+            <Image source={{ uri: folder.thumbnailUri }} style={styles.thumbnail} contentFit="cover" />
+          ) : (
+            <Ionicons name="folder-outline" size={26} color={accentColor} />
+          )}
+        </View>
+        <View style={styles.textWrap}>
+          <ThemedText numberOfLines={1} style={styles.name}>
+            {folder.name}
+          </ThemedText>
+          <ThemedText style={styles.count}>
+            {folder.videoCount} {folder.videoCount === 1 ? 'video' : 'videos'}
+          </ThemedText>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#888" />
+      </Pressable>
+    </Animated.View>
   );
 }
 
