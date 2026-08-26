@@ -62,3 +62,12 @@ export function accentMutedColor(hex: string): string {
   const { h, s } = hexToHsl(hex);
   return hslToHex(h, Math.max(0, s - 25), 15);
 }
+
+/** `#RRGGBB` + a 0-1 alpha -> an `rgba(...)` string. */
+export function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha))})`;
+}

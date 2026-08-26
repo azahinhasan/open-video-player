@@ -49,7 +49,6 @@ function buildVideos(assets: MediaLibrary.Asset[]): VideoAsset[] {
     width: asset.width,
     height: asset.height,
     thumbnailUri: null,
-    subtitleUri: null,
     folderId: asset.albumId || UNKNOWN_FOLDER_ID,
   }));
 }

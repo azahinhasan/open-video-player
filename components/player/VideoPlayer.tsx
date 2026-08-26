@@ -1,4 +1,4 @@
-import { forwardRef, useMemo } from 'react';
+import { forwardRef } from 'react';
 import { StyleSheet } from 'react-native';
 import Video, {
   OnBufferData,
@@ -7,8 +7,6 @@ import Video, {
   OnProgressData,
   OnVideoErrorData,
   ResizeMode,
-  SelectedTrackType,
-  TextTrackType,
   VideoRef,
 } from 'react-native-video';
 
@@ -21,8 +19,6 @@ type VideoPlayerProps = {
   rate?: number;
   loop?: boolean;
   zoomMode?: VideoZoomMode;
-  subtitleUri?: string | null;
-  subtitlesEnabled?: boolean;
   /** Auto-enters Picture-in-Picture when the user backgrounds the app while playing. */
   enterPictureInPictureOnLeave?: boolean;
   onLoad?: (data: OnLoadData) => void;
@@ -40,6 +36,11 @@ const ZOOM_MODE_TO_RESIZE_MODE: Record<VideoZoomMode, ResizeMode> = {
   stretch: ResizeMode.STRETCH,
 };
 
+// Subtitles are rendered by SubtitleOverlay (a JS-drawn, fully styleable
+// overlay) rather than react-native-video's native text tracks — the
+// library's own subtitle styling is Android-only and can't do color/bold/
+// background (see utils/subtitleParser.ts's callers), so this component no
+// longer needs to know about subtitles at all.
 export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(function VideoPlayer(
   {
     uri,
@@ -48,8 +49,6 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(function Video
     rate = 1,
     loop = false,
     zoomMode = 'contain',
-    subtitleUri,
-    subtitlesEnabled = true,
     enterPictureInPictureOnLeave = false,
     onLoad,
     onProgress,
@@ -61,39 +60,18 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(function Video
   },
   ref
 ) {
-  const textTracks = useMemo(() => {
-    if (!subtitleUri) {
-      return undefined;
-    }
-    const isVtt = subtitleUri.toLowerCase().endsWith('.vtt');
-    return [
-      {
-        title: 'Subtitle',
-        language: 'en' as const,
-        type: isVtt ? TextTrackType.VTT : TextTrackType.SUBRIP,
-        uri: subtitleUri,
-      },
-    ];
-  }, [subtitleUri]);
-
   return (
     <Video
       ref={ref}
       source={{
         uri,
         startPosition: startPositionSeconds ? Math.floor(startPositionSeconds * 1000) : undefined,
-        textTracks,
       }}
       style={StyleSheet.absoluteFill}
       resizeMode={ZOOM_MODE_TO_RESIZE_MODE[zoomMode]}
       paused={paused}
       rate={rate}
       repeat={loop}
-      selectedTextTrack={
-        textTracks
-          ? { type: subtitlesEnabled ? SelectedTrackType.INDEX : SelectedTrackType.DISABLED, value: 0 }
-          : undefined
-      }
       progressUpdateInterval={250}
       enterPictureInPictureOnLeave={enterPictureInPictureOnLeave}
       onLoad={onLoad}

@@ -22,7 +22,6 @@ export function vaultEntryToVideoAsset(entry: VaultEntry): VideoAsset {
     width: 0,
     height: 0,
     thumbnailUri: entry.thumbnailPath,
-    subtitleUri: null,
     folderId: 'vault',
   };
 }

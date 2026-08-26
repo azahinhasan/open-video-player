@@ -36,6 +36,9 @@ type ControlsOverlayProps = {
   hasSubtitle: boolean;
   subtitlesEnabled: boolean;
   onToggleSubtitles: () => void;
+  hasManualSubtitleOverride: boolean;
+  onSelectSubtitleFile: () => void;
+  onClearSubtitleOverride: () => void;
   volumeLevel: SharedValue<number>;
   onSetVolume: (value: number) => void;
   onBack: () => void;
@@ -72,6 +75,9 @@ export function ControlsOverlay({
   hasSubtitle,
   subtitlesEnabled,
   onToggleSubtitles,
+  hasManualSubtitleOverride,
+  onSelectSubtitleFile,
+  onClearSubtitleOverride,
   volumeLevel,
   onSetVolume,
   onBack,
@@ -232,6 +238,9 @@ export function ControlsOverlay({
         hasSubtitle={hasSubtitle}
         subtitlesEnabled={subtitlesEnabled}
         onToggleSubtitles={onToggleSubtitles}
+        hasManualSubtitleOverride={hasManualSubtitleOverride}
+        onSelectSubtitleFile={onSelectSubtitleFile}
+        onClearSubtitleOverride={onClearSubtitleOverride}
         onLock={onLock}
         pipSupported={pipSupported}
         onEnterPip={onEnterPip}

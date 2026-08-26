@@ -15,12 +15,14 @@ import { useLibraryPreferences } from '@/hooks/useLibraryPreferences';
 import { usePlaybackPreferences } from '@/hooks/usePlaybackPreferences';
 import { useAccentColor, useThemePreference } from '@/hooks/useThemePreference';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useSubtitleStylePreferences } from '@/hooks/useSubtitleStylePreferences';
 import { useVaultAuthStore } from '@/hooks/useVaultAuthStore';
 import { PinGatedSwitch } from '@/components/settings/PinGatedSwitch';
 import { PinSetupSheet } from '@/components/vault/PinSetupSheet';
 import { VerifyPinSheet } from '@/components/vault/VerifyPinSheet';
 import { radius, spacing, typography } from '@/theme/tokens';
 import type { ControlsLayout, ResumeBehavior } from '@/utils/playbackPreferences';
+import type { SubtitleBackgroundOpacity, SubtitleFontSize } from '@/utils/subtitleStylePreferences';
 import type { ThemeMode } from '@/utils/themePreference';
 
 const RESUME_OPTIONS: { value: ResumeBehavior; label: string }[] = [
@@ -37,6 +39,19 @@ const MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'system', label: 'System' },
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
+];
+
+const SUBTITLE_FONT_SIZE_OPTIONS: { value: SubtitleFontSize; label: string }[] = [
+  { value: 'small', label: 'Small' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'large', label: 'Large' },
+];
+
+const SUBTITLE_BACKGROUND_OPACITY_OPTIONS: { value: SubtitleBackgroundOpacity; label: string }[] = [
+  { value: 'off', label: 'Off' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
 ];
 
 const ACCENT_KEYS = Object.keys(ACCENT_COLORS) as AccentColorKey[];
@@ -106,6 +121,18 @@ export default function SettingsScreen() {
 
   const autoRefreshOnLaunch = useLibraryPreferences((s) => s.autoRefreshOnLaunch);
   const setAutoRefreshOnLaunch = useLibraryPreferences((s) => s.setAutoRefreshOnLaunch);
+
+  const subtitleFontSize = useSubtitleStylePreferences((s) => s.fontSize);
+  const setSubtitleFontSize = useSubtitleStylePreferences((s) => s.setFontSize);
+  const subtitleBold = useSubtitleStylePreferences((s) => s.bold);
+  const setSubtitleBold = useSubtitleStylePreferences((s) => s.setBold);
+  const subtitleTextColor = useSubtitleStylePreferences((s) => s.textColor);
+  const setSubtitleTextColor = useSubtitleStylePreferences((s) => s.setTextColor);
+  const subtitleBackgroundColor = useSubtitleStylePreferences((s) => s.backgroundColor);
+  const setSubtitleBackgroundColor = useSubtitleStylePreferences((s) => s.setBackgroundColor);
+  const subtitleBackgroundOpacity = useSubtitleStylePreferences((s) => s.backgroundOpacity);
+  const setSubtitleBackgroundOpacity = useSubtitleStylePreferences((s) => s.setBackgroundOpacity);
+  const [subtitleColorTarget, setSubtitleColorTarget] = useState<'text' | 'background' | null>(null);
 
   const hasVaultPin = useVaultAuthStore((s) => s.hasPin);
   const vaultBiometricsAvailable = useVaultAuthStore((s) => s.biometricsAvailable);
@@ -189,6 +216,61 @@ export default function SettingsScreen() {
             options={CONTROLS_LAYOUT_OPTIONS}
             value={controlsLayout}
             onChange={setControlsLayout}
+          />
+        </View>
+      </Card>
+
+      <SectionHeader title="Subtitles" />
+      <Card>
+        <View style={styles.controlBlock}>
+          <ThemedText style={styles.controlLabel}>Text size</ThemedText>
+          <SegmentedControl
+            options={SUBTITLE_FONT_SIZE_OPTIONS}
+            value={subtitleFontSize}
+            onChange={setSubtitleFontSize}
+          />
+        </View>
+
+        <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
+
+        <View style={styles.row}>
+          <Ionicons name="text-outline" size={20} color={subtitleBold ? accentColor : mutedColor} />
+          <ThemedText style={styles.rowLabel}>Bold</ThemedText>
+          <View style={styles.rowSpacer} />
+          <Switch
+            value={subtitleBold}
+            onValueChange={setSubtitleBold}
+            trackColor={{ false: 'rgba(128,128,128,0.3)', true: accentColor }}
+            thumbColor="#fff"
+          />
+        </View>
+
+        <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
+
+        <Pressable style={styles.row} onPress={() => setSubtitleColorTarget('text')}>
+          <Ionicons name="color-palette-outline" size={20} color={mutedColor} />
+          <ThemedText style={styles.rowLabel}>Text color</ThemedText>
+          <View style={styles.rowSpacer} />
+          <View style={[styles.colorSwatch, { backgroundColor: subtitleTextColor, borderColor }]} />
+        </Pressable>
+
+        <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
+
+        <Pressable style={styles.row} onPress={() => setSubtitleColorTarget('background')}>
+          <Ionicons name="square-outline" size={20} color={mutedColor} />
+          <ThemedText style={styles.rowLabel}>Background color</ThemedText>
+          <View style={styles.rowSpacer} />
+          <View style={[styles.colorSwatch, { backgroundColor: subtitleBackgroundColor, borderColor }]} />
+        </Pressable>
+
+        <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
+
+        <View style={styles.controlBlock}>
+          <ThemedText style={styles.controlLabel}>Background opacity</ThemedText>
+          <SegmentedControl
+            options={SUBTITLE_BACKGROUND_OPACITY_OPTIONS}
+            value={subtitleBackgroundOpacity}
+            onChange={setSubtitleBackgroundOpacity}
           />
         </View>
       </Card>
@@ -288,6 +370,20 @@ export default function SettingsScreen() {
           setColorSheetVisible(false);
         }}
       />
+
+      <CustomColorSheet
+        visible={subtitleColorTarget !== null}
+        initialColor={subtitleColorTarget === 'background' ? subtitleBackgroundColor : subtitleTextColor}
+        onCancel={() => setSubtitleColorTarget(null)}
+        onConfirm={(hex) => {
+          if (subtitleColorTarget === 'background') {
+            setSubtitleBackgroundColor(hex);
+          } else {
+            setSubtitleTextColor(hex);
+          }
+          setSubtitleColorTarget(null);
+        }}
+      />
     </ThemedView>
   );
 }
@@ -352,6 +448,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
     marginTop: -spacing.sm,
+  },
+  colorSwatch: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   swatchRow: {
     flexDirection: 'row',

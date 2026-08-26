@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 
 import type { VideoAsset } from '@/types/video';
+import {
+  readSubtitleOverrides,
+  writeSubtitleOverrides,
+  type SubtitleOverrides,
+} from '@/utils/subtitleOverrides';
 import { readViewedVideos, writeViewedVideos, type ViewedVideos } from '@/utils/viewedVideos';
 import { readWatchHistory, writeWatchHistory, type WatchHistory, type WatchHistoryEntry } from '@/utils/watchHistory';
 
@@ -12,6 +17,7 @@ type PlaybackState = {
   paused: boolean;
   history: WatchHistory;
   viewed: ViewedVideos;
+  subtitleOverrides: SubtitleOverrides;
   setQueue: (queue: VideoAsset[]) => void;
   play: () => void;
   pause: () => void;
@@ -21,6 +27,8 @@ type PlaybackState = {
   positionFor: (videoId: string) => number;
   resumeEntryFor: (videoId: string) => WatchHistoryEntry | null;
   markViewed: (videoId: string) => void;
+  setSubtitleOverride: (videoId: string, uri: string) => void;
+  clearSubtitleOverride: (videoId: string) => void;
 };
 
 export const usePlaybackStore = create<PlaybackState>((set, get) => ({
@@ -28,6 +36,7 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   paused: false,
   history: readWatchHistory(),
   viewed: readViewedVideos(),
+  subtitleOverrides: readSubtitleOverrides(),
   setQueue: (queue) => set({ queue, paused: false }),
   play: () => set({ paused: false }),
   pause: () => set({ paused: true }),
@@ -58,6 +67,17 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
     const viewed = { ...get().viewed, [videoId]: true as const };
     set({ viewed });
     writeViewedVideos(viewed);
+  },
+  setSubtitleOverride: (videoId, uri) => {
+    const subtitleOverrides = { ...get().subtitleOverrides, [videoId]: uri };
+    set({ subtitleOverrides });
+    writeSubtitleOverrides(subtitleOverrides);
+  },
+  clearSubtitleOverride: (videoId) => {
+    const subtitleOverrides = { ...get().subtitleOverrides };
+    delete subtitleOverrides[videoId];
+    set({ subtitleOverrides });
+    writeSubtitleOverrides(subtitleOverrides);
   },
 }));
 

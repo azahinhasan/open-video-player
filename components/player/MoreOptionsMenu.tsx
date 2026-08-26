@@ -15,6 +15,9 @@ type MoreOptionsMenuProps = {
   hasSubtitle: boolean;
   subtitlesEnabled: boolean;
   onToggleSubtitles: () => void;
+  hasManualSubtitleOverride: boolean;
+  onSelectSubtitleFile: () => void;
+  onClearSubtitleOverride: () => void;
   onLock: () => void;
   pipSupported: boolean;
   onEnterPip: () => void;
@@ -32,6 +35,9 @@ export function MoreOptionsMenu({
   hasSubtitle,
   subtitlesEnabled,
   onToggleSubtitles,
+  hasManualSubtitleOverride,
+  onSelectSubtitleFile,
+  onClearSubtitleOverride,
   onLock,
   pipSupported,
   onEnterPip,
@@ -78,6 +84,28 @@ export function MoreOptionsMenu({
             <Text style={styles.rowText}>Subtitles</Text>
             <View style={styles.rowSpacer} />
             <Ionicons name={subtitlesEnabled ? 'checkbox' : 'square-outline'} size={18} color="#fff" />
+          </Pressable>
+        ) : null}
+
+        <Pressable
+          style={styles.row}
+          onPress={() => {
+            onClose();
+            onSelectSubtitleFile();
+          }}>
+          <Ionicons name="document-attach-outline" size={18} color="#fff" />
+          <Text style={styles.rowText}>Select subtitle file</Text>
+        </Pressable>
+
+        {hasManualSubtitleOverride ? (
+          <Pressable
+            style={styles.row}
+            onPress={() => {
+              onClose();
+              onClearSubtitleOverride();
+            }}>
+            <Ionicons name="close-circle-outline" size={18} color="#fff" />
+            <Text style={styles.rowText}>Remove subtitle</Text>
           </Pressable>
         ) : null}
 

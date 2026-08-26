@@ -1,11 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import { Directory, File, Paths } from 'expo-file-system';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type {
   OnBufferData,
   OnLoadData,
@@ -17,6 +20,7 @@ import { VolumeManager } from 'react-native-volume-manager';
 
 import { ControlsOverlay } from '@/components/player/ControlsOverlay';
 import { GestureLayer } from '@/components/player/GestureLayer';
+import { SubtitleOverlay } from '@/components/player/SubtitleOverlay';
 import { VideoPlayer, type VideoZoomMode } from '@/components/player/VideoPlayer';
 import { useImmersiveMode } from '@/hooks/useImmersiveMode';
 import { useOrientationLock } from '@/hooks/useOrientationLock';
@@ -24,6 +28,8 @@ import { usePlaybackPreferences } from '@/hooks/usePlaybackPreferences';
 import { adjacentVideoId, usePlaybackStore } from '@/hooks/usePlaybackStore';
 import { useAccentColor } from '@/hooks/useThemePreference';
 import type { VideoAsset } from '@/types/video';
+import { findSidecarSubtitle, isSubtitleFilename, loadSubtitleCues } from '@/utils/subtitles';
+import type { SubtitleCue } from '@/utils/subtitleParser';
 
 const AUTO_HIDE_DELAY_MS = 3000;
 const ZOOM_CYCLE: VideoZoomMode[] = ['contain', 'cover', 'stretch'];
@@ -38,6 +44,13 @@ const BOTTOM_CONTROLS_TOUCH_HEIGHT_WITH_TRANSPORT = 190;
 // is the SDK int directly, so this hides the button on unsupported devices
 // instead of leaving a control that silently no-ops.
 const PIP_SUPPORTED = Platform.OS === 'android' && Platform.Version >= 26;
+// Small clearance above the safe area when the controls bar is hidden, and
+// above the controls bar itself (plus its own safe-area padding) when it's
+// visible — computed from insets.bottom rather than a flat constant so this
+// lands correctly in both portrait and landscape (landscape's safe-area
+// insets differ, and a flat offset was proportionally too large there).
+const SUBTITLE_BASE_GAP = 20;
+const SUBTITLE_CONTROLS_GAP = 8;
 
 type PlayerScreenProps = {
   /**
@@ -64,6 +77,7 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
   const video = queue.find((v) => v.id === id) ?? null;
   const videoRef = useRef<VideoRef>(null);
   const accentColor = useAccentColor();
+  const insets = useSafeAreaInsets();
   const resumeBehavior = usePlaybackPreferences((s) => s.resumeBehavior);
   const controlsLayout = usePlaybackPreferences((s) => s.controlsLayout);
   const bottomControlsTouchHeight =
@@ -80,8 +94,15 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
   const [loop, setLoop] = useState(false);
   const [zoomMode, setZoomMode] = useState<VideoZoomMode>('contain');
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
+  const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
   const [pipActive, setPipActive] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guards against a slow subtitle-file read resolving after a newer
+  // request (rapid video switching, or picking a file right before
+  // switching videos) and overwriting the cues with stale results.
+  const subtitleRequestIdRef = useRef<string | null>(null);
+
+  const hasManualSubtitleOverride = usePlaybackStore((s) => (id ? s.subtitleOverrides[id] !== undefined : false));
 
   // Single source of truth for media volume, shared between GestureLayer's
   // swipe gesture and the mute button — both read/write this same value so
@@ -199,6 +220,24 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
     });
   }, [scheduleAutoHide, clearHideTimer]);
 
+  const loadSubtitlesFor = useCallback((targetVideo: VideoAsset) => {
+    subtitleRequestIdRef.current = targetVideo.id;
+    const override = usePlaybackStore.getState().subtitleOverrides[targetVideo.id];
+    const sourceUri = override ?? findSidecarSubtitle(targetVideo);
+    if (!sourceUri) {
+      setSubtitleCues([]);
+      return;
+    }
+    loadSubtitleCues(sourceUri).then((cues) => {
+      // Only apply if this is still the most recently requested video —
+      // a slower earlier request finishing after a newer one shouldn't
+      // clobber it.
+      if (subtitleRequestIdRef.current === targetVideo.id) {
+        setSubtitleCues(cues);
+      }
+    });
+  }, []);
+
   useEffect(() => {
     setDuration(0);
     setCurrentTime(0);
@@ -209,6 +248,12 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
     setLoop(false);
     setZoomMode('contain');
     setSubtitlesEnabled(true);
+    setSubtitleCues([]);
+
+    const currentVideo = queue.find((v) => v.id === id);
+    if (currentVideo) {
+      loadSubtitlesFor(currentVideo);
+    }
 
     usePlaybackStore.getState().markViewed(id);
     play();
@@ -317,6 +362,48 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
     setZoomMode((prev) => ZOOM_CYCLE[(ZOOM_CYCLE.indexOf(prev) + 1) % ZOOM_CYCLE.length]);
   }, []);
 
+  const handleSelectSubtitleFile = useCallback(async () => {
+    if (!video) {
+      return;
+    }
+    const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+    if (result.canceled || result.assets.length === 0) {
+      return;
+    }
+    const picked = result.assets[0];
+    if (!isSubtitleFilename(picked.name)) {
+      Alert.alert('Not a subtitle file', 'Please choose a .srt or .vtt file.');
+      return;
+    }
+    try {
+      // Copies the picked file into app storage under a name keyed by video
+      // id, rather than keeping the picker's own uri — a document-picker
+      // uri isn't guaranteed to still be readable on a later app launch.
+      const ext = picked.name.toLowerCase().endsWith('.vtt') ? '.vtt' : '.srt';
+      const dir = new Directory(Paths.document, 'subtitles');
+      if (!dir.exists) {
+        dir.create({ intermediates: true, idempotent: true });
+      }
+      const destination = new File(dir, `${video.id}${ext}`);
+      if (destination.exists) {
+        destination.delete();
+      }
+      new File(picked.uri).copy(destination);
+      usePlaybackStore.getState().setSubtitleOverride(video.id, destination.uri);
+      loadSubtitlesFor(video);
+    } catch {
+      Alert.alert("Couldn't load subtitle", 'The file could not be read. Please try again.');
+    }
+  }, [video, loadSubtitlesFor]);
+
+  const handleClearSubtitleOverride = useCallback(() => {
+    if (!video) {
+      return;
+    }
+    usePlaybackStore.getState().clearSubtitleOverride(video.id);
+    loadSubtitlesFor(video);
+  }, [video, loadSubtitlesFor]);
+
   const handleEnterPip = useCallback(() => {
     videoRef.current?.enterPictureInPicture?.();
   }, []);
@@ -356,6 +443,14 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
   const hasNext = adjacentVideoId(queue, video.id, 1) !== null;
   const hasPrevious = adjacentVideoId(queue, video.id, -1) !== null;
 
+  // The lock button hides GestureLayer/ControlsOverlay entirely even if
+  // controlsVisible itself hasn't been reset, so the controls bar being
+  // genuinely on screen requires checking both.
+  const controlsBarVisible = controlsVisible && !locked;
+  const subtitleBottomOffset = controlsBarVisible
+    ? insets.bottom + bottomControlsTouchHeight + SUBTITLE_CONTROLS_GAP
+    : insets.bottom + SUBTITLE_BASE_GAP;
+
   return (
     <View style={styles.container}>
       <StatusBar hidden={!controlsVisible} animated />
@@ -377,8 +472,6 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
             rate={rate}
             loop={loop}
             zoomMode={zoomMode}
-            subtitleUri={video.subtitleUri}
-            subtitlesEnabled={subtitlesEnabled}
             enterPictureInPictureOnLeave={PIP_SUPPORTED}
             onLoad={handleLoad}
             onProgress={handleProgress}
@@ -388,6 +481,15 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
             onPictureInPictureStatusChanged={handlePipStatusChanged}
             onRestoreUserInterfaceForPictureInPictureStop={handleRestoreFromPip}
           />
+
+          {pipActive ? null : (
+            <SubtitleOverlay
+              cues={subtitleCues}
+              currentTime={currentTime}
+              visible={subtitlesEnabled}
+              bottomOffset={subtitleBottomOffset}
+            />
+          )}
 
           {pipActive ? null : locked ? (
             <Pressable style={styles.unlockButton} onPress={() => setLocked(false)} hitSlop={16}>
@@ -428,9 +530,12 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
                 loop={loop}
                 onToggleLoop={() => setLoop((v) => !v)}
                 onCycleZoomMode={handleCycleZoomMode}
-                hasSubtitle={video.subtitleUri !== null}
+                hasSubtitle={subtitleCues.length > 0}
                 subtitlesEnabled={subtitlesEnabled}
                 onToggleSubtitles={() => setSubtitlesEnabled((v) => !v)}
+                hasManualSubtitleOverride={hasManualSubtitleOverride}
+                onSelectSubtitleFile={handleSelectSubtitleFile}
+                onClearSubtitleOverride={handleClearSubtitleOverride}
                 volumeLevel={volumeLevel}
                 onSetVolume={setVolume}
                 onBack={handleBack}

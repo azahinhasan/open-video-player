@@ -8,7 +8,6 @@ export type VideoAsset = {
   width: number;
   height: number;
   thumbnailUri: string | null;
-  subtitleUri: string | null;
   folderId: string;
 };
 
