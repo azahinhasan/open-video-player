@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
+import { Stack } from "expo-router";
 import { useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, View } from "react-native";
 
@@ -8,6 +9,7 @@ import { DeleteConfirmSheet } from "@/components/library/DeleteConfirmSheet";
 import { SegmentedControl } from "@/components/settings/SegmentedControl";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { useAccentColor } from "@/hooks/useThemePreference";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useVideoLibrary } from "@/hooks/useVideoLibrary";
 import { radius, spacing, typography } from "@/theme/tokens";
@@ -29,12 +31,16 @@ type SizedVideo = VideoAsset & { size: number | null };
 
 export default function StorageCleanupScreen() {
   const { videos, deleteVideos } = useVideoLibrary();
+  const accentColor = useAccentColor();
   const surfaceColor = useThemeColor({}, "surface");
   const borderColor = useThemeColor({}, "surfaceBorder");
   const mutedColor = useThemeColor({}, "textMuted");
   const dangerColor = useThemeColor({}, "danger");
   const [tab, setTab] = useState<CleanupTab>("largest");
   const [deleteVideo, setDeleteVideo] = useState<SizedVideo | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchDeleteVisible, setBatchDeleteVisible] = useState(false);
 
   const sized = useMemo<SizedVideo[]>(
     () => videos.map((video) => ({ ...video, size: getFileSize(video.uri) })),
@@ -58,6 +64,33 @@ export default function StorageCleanupScreen() {
     return copy.slice(0, 30);
   }, [sized, tab]);
 
+  const enterSelectMode = (video: SizedVideo) => {
+    setSelectMode(true);
+    setSelectedIds(new Set([video.id]));
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelect = (video: SizedVideo) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(video.id)) {
+        next.delete(video.id);
+      } else {
+        next.add(video.id);
+      }
+      return next;
+    });
+  };
+
+  const allSelected = rows.length > 0 && selectedIds.size === rows.length;
+  const handleSelectAll = () => {
+    setSelectedIds(allSelected ? new Set() : new Set(rows.map((v) => v.id)));
+  };
+
   const handleConfirmDelete = async () => {
     if (!deleteVideo) {
       return;
@@ -73,8 +106,70 @@ export default function StorageCleanupScreen() {
     }
   };
 
+  const handleConfirmBatchDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) {
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setBatchDeleteVisible(false);
+    const success = await deleteVideos(ids);
+    if (success) {
+      exitSelectMode();
+    } else {
+      Alert.alert(
+        "Couldn't delete",
+        "Some videos were not deleted. Please try again.",
+      );
+    }
+  };
+
+  const batchDeleteFirstVideo = useMemo(
+    () => rows.find((v) => selectedIds.has(v.id)) ?? null,
+    [rows, selectedIds],
+  );
+
   return (
     <ThemedView style={styles.container}>
+      <Stack.Screen
+        options={{
+          title: selectMode
+            ? `${selectedIds.size} selected`
+            : "Storage & cleanup",
+          headerLeft: selectMode
+            ? () => (
+                <Pressable onPress={exitSelectMode} hitSlop={12}>
+                  <Ionicons name="close" size={22} color={accentColor} />
+                </Pressable>
+              )
+            : undefined,
+          headerRight: selectMode
+            ? () => (
+                <View style={styles.headerActions}>
+                  <Pressable onPress={handleSelectAll} hitSlop={12}>
+                    <Ionicons
+                      name={allSelected ? "checkbox" : "checkbox-outline"}
+                      size={22}
+                      color={accentColor}
+                    />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setBatchDeleteVisible(true)}
+                    hitSlop={12}
+                    disabled={selectedIds.size === 0}
+                  >
+                    <Ionicons
+                      name="trash-outline"
+                      size={22}
+                      color={selectedIds.size === 0 ? mutedColor : dangerColor}
+                    />
+                  </Pressable>
+                </View>
+              )
+            : undefined,
+        }}
+      />
+
       <View style={styles.statsBlock}>
         <ThemedText style={styles.statsValue}>
           {formatFileSize(totalSize)}
@@ -96,8 +191,10 @@ export default function StorageCleanupScreen() {
           <ThemedText style={styles.empty}>No videos found.</ThemedText>
         }
         renderItem={({ item }) => (
-          <View
+          <Pressable
             style={[styles.row, { backgroundColor: surfaceColor, borderColor }]}
+            onPress={() => (selectMode ? toggleSelect(item) : undefined)}
+            onLongPress={() => (selectMode ? undefined : enterSelectMode(item))}
           >
             <View style={styles.thumbnailWrap}>
               {item.thumbnailUri ? (
@@ -111,6 +208,20 @@ export default function StorageCleanupScreen() {
                   <Ionicons name="film-outline" size={20} color={mutedColor} />
                 </View>
               )}
+              {selectMode ? (
+                <View
+                  style={[
+                    styles.checkCircle,
+                    selectedIds.has(item.id)
+                      ? { backgroundColor: accentColor, borderColor: accentColor }
+                      : null,
+                  ]}
+                >
+                  {selectedIds.has(item.id) ? (
+                    <Ionicons name="checkmark" size={14} color="#fff" />
+                  ) : null}
+                </View>
+              ) : null}
             </View>
             <View style={styles.rowInfo}>
               <ThemedText numberOfLines={1} style={styles.filename}>
@@ -122,10 +233,16 @@ export default function StorageCleanupScreen() {
                   : `${formatDate(item.creationTime)} · ${item.size !== null ? formatFileSize(item.size) : "Unknown size"}`}
               </ThemedText>
             </View>
-            <Pressable style={styles.deleteButton} onPress={() => setDeleteVideo(item)} hitSlop={10}>
-              <Ionicons name="trash-outline" size={20} color={dangerColor} />
-            </Pressable>
-          </View>
+            {selectMode ? null : (
+              <Pressable
+                style={styles.deleteButton}
+                onPress={() => setDeleteVideo(item)}
+                hitSlop={10}
+              >
+                <Ionicons name="trash-outline" size={20} color={dangerColor} />
+              </Pressable>
+            )}
+          </Pressable>
         )}
       />
 
@@ -135,6 +252,19 @@ export default function StorageCleanupScreen() {
         thumbnailUri={deleteVideo?.thumbnailUri}
         onCancel={() => setDeleteVideo(null)}
         onConfirm={handleConfirmDelete}
+      />
+
+      <DeleteConfirmSheet
+        visible={batchDeleteVisible}
+        title={`${selectedIds.size} video${selectedIds.size === 1 ? "" : "s"} selected`}
+        subtitle={
+          selectedIds.size > 1 && batchDeleteFirstVideo
+            ? `${batchDeleteFirstVideo.filename} and ${selectedIds.size - 1} more`
+            : (batchDeleteFirstVideo?.filename ?? undefined)
+        }
+        thumbnailUri={batchDeleteFirstVideo?.thumbnailUri}
+        onCancel={() => setBatchDeleteVisible(false)}
+        onConfirm={handleConfirmBatchDelete}
       />
     </ThemedView>
   );
@@ -197,6 +327,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  checkCircle: {
+    position: "absolute",
+    right: 4,
+    top: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.8)",
+    backgroundColor: "rgba(0,0,0,0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   rowInfo: {
     flex: 1,
     gap: 1,
@@ -210,5 +353,10 @@ const styles = StyleSheet.create({
   },
   meta: {
     fontSize: typography.size.micro,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
   },
 });
