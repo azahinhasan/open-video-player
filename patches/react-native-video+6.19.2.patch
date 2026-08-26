@@ -1,0 +1,111 @@
+diff --git a/node_modules/react-native-video/android/src/main/java/com/brentvatne/exoplayer/ReactExoplayerView.java b/node_modules/react-native-video/android/src/main/java/com/brentvatne/exoplayer/ReactExoplayerView.java
+index e16ac96..fff0bfa 100644
+--- a/node_modules/react-native-video/android/src/main/java/com/brentvatne/exoplayer/ReactExoplayerView.java
++++ b/node_modules/react-native-video/android/src/main/java/com/brentvatne/exoplayer/ReactExoplayerView.java
+@@ -732,7 +732,11 @@ public class ReactExoplayerView extends FrameLayout implements
+ 
+         DefaultRenderersFactory renderersFactory =
+                 new DefaultRenderersFactory(getContext())
+-                        .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
++                        // ON (not PREFER): only falls back to a software decoder (e.g.
++                        // FfmpegAudioRenderer, if present on the app's classpath) when no
++                        // hardware decoder supports the track, instead of always preferring
++                        // software decoding.
++                        .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+                         .setEnableDecoderFallback(true)
+                         .forceEnableMediaCodecAsynchronousQueueing();
+ 
+@@ -1540,34 +1544,47 @@ public class ReactExoplayerView extends FrameLayout implements
+ 
+     private ArrayList<Track> getAudioTrackInfo() {
+         ArrayList<Track> audioTracks = new ArrayList<>();
+-        if (trackSelector == null) {
++        if (trackSelector == null || player == null) {
+             return audioTracks;
+         }
+ 
+         MappingTrackSelector.MappedTrackInfo info = trackSelector.getCurrentMappedTrackInfo();
+-        int index = getTrackRendererIndex(C.TRACK_TYPE_AUDIO);
+-        if (info == null || index == C.INDEX_UNSET) {
++        if (info == null) {
+             return audioTracks;
+         }
+-        TrackGroupArray groups = info.getTrackGroups(index);
+         TrackSelectionArray selectionArray = player.getCurrentTrackSelections();
+-        TrackSelection selection = selectionArray.get(C.TRACK_TYPE_AUDIO);
+-
+ 
+-        for (int groupIndex = 0; groupIndex < groups.length; ++groupIndex) {
+-            TrackGroup group = groups.get(groupIndex);
+-            Format format = group.getFormat(0);
++        // A software decoder extension (e.g. FfmpegAudioRenderer) is a
++        // separate renderer from the hardware MediaCodecAudioRenderer, and
++        // DefaultTrackSelector maps each audio TrackGroup to whichever
++        // renderer actually supports it — so all tracks can end up mapped
++        // to the extension renderer alone (e.g. a file whose audio tracks
++        // are all a codec with no hardware decoder). Every renderer of
++        // type AUDIO must be walked and merged into one flat list rather
++        // than assuming a single fixed audio renderer index.
++        int rendererCount = player.getRendererCount();
++        for (int rendererIndex = 0; rendererIndex < rendererCount; ++rendererIndex) {
++            if (player.getRendererType(rendererIndex) != C.TRACK_TYPE_AUDIO) {
++                continue;
++            }
++            TrackGroupArray groups = info.getTrackGroups(rendererIndex);
++            TrackSelection selection = selectionArray.get(rendererIndex);
++
++            for (int groupIndex = 0; groupIndex < groups.length; ++groupIndex) {
++                TrackGroup group = groups.get(groupIndex);
++                Format format = group.getFormat(0);
++
++                // Check if this specific group is the currently selected one
++                boolean isSelected = false;
++                if (selection != null && selection.getTrackGroup() == group) {
++                    isSelected = true;
++                }
+ 
+-            // Check if this specific group is the currently selected one
+-            boolean isSelected = false;
+-            if (selection != null && selection.getTrackGroup() == group) {
+-                isSelected = true;
++                Track audioTrack = exoplayerTrackToGenericTrack(format, audioTracks.size(), selection, group);
++                audioTrack.setBitrate(format.bitrate == Format.NO_VALUE ? 0 : format.bitrate);
++                audioTrack.setSelected(isSelected);
++                audioTracks.add(audioTrack);
+             }
+-            
+-            Track audioTrack = exoplayerTrackToGenericTrack(format, groupIndex, selection, group);
+-            audioTrack.setBitrate(format.bitrate == Format.NO_VALUE ? 0 : format.bitrate);
+-            audioTrack.setSelected(isSelected);
+-            audioTracks.add(audioTrack);
+         }
+         
+         return audioTracks;
+@@ -2250,6 +2267,27 @@ public class ReactExoplayerView extends FrameLayout implements
+                     if (iValue < groups.get(groupIndex).length) {
+                         tracks.set(0, iValue);
+                     }
++                } else if (trackType == C.TRACK_TYPE_AUDIO) {
++                    // getAudioTrackInfo() hands JS a flat index spanning every
++                    // renderer of type AUDIO (hardware + any decoder
++                    // extension), so resolving it back has to walk renderers
++                    // the same way rather than assume it belongs to the
++                    // single rendererIndex resolved above.
++                    int remaining = iValue;
++                    int rCount = player.getRendererCount();
++                    for (int rIdx = 0; rIdx < rCount; ++rIdx) {
++                        if (player.getRendererType(rIdx) != C.TRACK_TYPE_AUDIO) {
++                            continue;
++                        }
++                        TrackGroupArray rGroups = info.getTrackGroups(rIdx);
++                        if (remaining < rGroups.length) {
++                            rendererIndex = rIdx;
++                            groups = rGroups;
++                            groupIndex = remaining;
++                            break;
++                        }
++                        remaining -= rGroups.length;
++                    }
+                 } else if (iValue < groups.length) {
+                     groupIndex = iValue;
+                 }

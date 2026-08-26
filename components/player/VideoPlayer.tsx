@@ -1,12 +1,14 @@
 import { forwardRef } from 'react';
 import { StyleSheet } from 'react-native';
 import Video, {
+  OnAudioTracksData,
   OnBufferData,
   OnLoadData,
   OnPictureInPictureStatusChangedData,
   OnProgressData,
   OnVideoErrorData,
   ResizeMode,
+  SelectedTrackType,
   VideoRef,
 } from 'react-native-video';
 
@@ -19,6 +21,23 @@ type VideoPlayerProps = {
   rate?: number;
   loop?: boolean;
   zoomMode?: VideoZoomMode;
+  /**
+   * Native track index (from OnLoadData/OnAudioTracksData.audioTracks) to
+   * play — undefined/null lets the player use its own default rather than
+   * applying an explicit override. Left unset unless the user has
+   * deliberately picked a non-default track (see PlayerScreen), since
+   * forcing an override even for the already-active default track means an
+   * extra unnecessary decoder reinitialization.
+   */
+  selectedAudioTrackIndex?: number | null;
+  /**
+   * Shown immediately in place of the video and only hidden once the first
+   * real frame at the resolved start position has actually rendered
+   * (react-native-video's onReadyForDisplay) — masks ExoPlayer's cold-start/
+   * seek latency behind already-visible content instead of a black screen
+   * or a jarring frame-0-then-jump, so resuming mid-video feels instant.
+   */
+  posterUri?: string | null;
   /** Auto-enters Picture-in-Picture when the user backgrounds the app while playing. */
   enterPictureInPictureOnLeave?: boolean;
   onLoad?: (data: OnLoadData) => void;
@@ -26,6 +45,8 @@ type VideoPlayerProps = {
   onBuffer?: (data: OnBufferData) => void;
   onEnd?: () => void;
   onError?: (data: OnVideoErrorData) => void;
+  /** Fires on load AND whenever the native player's own track state changes (e.g. after a selection actually takes effect) — a more reliable source of "what's really playing" than assuming our own request succeeded. */
+  onAudioTracks?: (data: OnAudioTracksData) => void;
   onPictureInPictureStatusChanged?: (isActive: boolean) => void;
   onRestoreUserInterfaceForPictureInPictureStop?: () => void;
 };
@@ -49,12 +70,15 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(function Video
     rate = 1,
     loop = false,
     zoomMode = 'contain',
+    selectedAudioTrackIndex,
+    posterUri,
     enterPictureInPictureOnLeave = false,
     onLoad,
     onProgress,
     onBuffer,
     onEnd,
     onError,
+    onAudioTracks,
     onPictureInPictureStatusChanged,
     onRestoreUserInterfaceForPictureInPictureStop,
   },
@@ -69,9 +93,16 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(function Video
       }}
       style={StyleSheet.absoluteFill}
       resizeMode={ZOOM_MODE_TO_RESIZE_MODE[zoomMode]}
+      poster={posterUri ? { source: { uri: posterUri } } : undefined}
+      posterResizeMode={zoomMode}
       paused={paused}
       rate={rate}
       repeat={loop}
+      selectedAudioTrack={
+        selectedAudioTrackIndex !== undefined && selectedAudioTrackIndex !== null
+          ? { type: SelectedTrackType.INDEX, value: selectedAudioTrackIndex }
+          : undefined
+      }
       progressUpdateInterval={250}
       enterPictureInPictureOnLeave={enterPictureInPictureOnLeave}
       onLoad={onLoad}
@@ -79,6 +110,7 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(function Video
       onBuffer={onBuffer}
       onEnd={onEnd}
       onError={onError}
+      onAudioTracks={onAudioTracks}
       onPictureInPictureStatusChanged={(e: OnPictureInPictureStatusChangedData) =>
         onPictureInPictureStatusChanged?.(e.isActive)
       }

@@ -10,6 +10,8 @@ import { Alert, AppState, Platform, Pressable, StyleSheet, Text, View } from 're
 import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type {
+  AudioTrack,
+  OnAudioTracksData,
   OnBufferData,
   OnLoadData,
   OnProgressData,
@@ -95,7 +97,13 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
   const [zoomMode, setZoomMode] = useState<VideoZoomMode>('contain');
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
+  const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
+  const [selectedAudioTrackIndex, setSelectedAudioTrackIndex] = useState<number | null>(null);
   const [pipActive, setPipActive] = useState(false);
+  // Bumped to force VideoPlayer to fully remount (a fresh native player
+  // instance) when recovering from a fatal playback error — ExoPlayer's
+  // error state needs a new source, not just a prop change, to clear.
+  const [reloadToken, setReloadToken] = useState(0);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guards against a slow subtitle-file read resolving after a newer
   // request (rapid video switching, or picking a file right before
@@ -174,14 +182,22 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
 
   // Covers backgrounding the app (home button, app switcher) mid-scrub,
   // where the screen never unmounts so the effect above wouldn't fire.
+  // Also pauses playback on backgrounding — enterPictureInPictureOnLeave is
+  // off (see the VideoPlayer render below), so without this the native
+  // player can keep playing audio behind a backgrounded/closed app. Skipped
+  // while pipActive: that's the one case backgrounding is expected to keep
+  // playing, since the user explicitly chose PiP via its button.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'background' || nextState === 'inactive') {
         persistCurrentPosition();
+        if (!pipActive) {
+          usePlaybackStore.getState().pause();
+        }
       }
     });
     return () => subscription.remove();
-  }, [persistCurrentPosition]);
+  }, [persistCurrentPosition, pipActive]);
 
   useKeepAwake();
   useOrientationLock(orientationLock);
@@ -249,6 +265,8 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
     setZoomMode('contain');
     setSubtitlesEnabled(true);
     setSubtitleCues([]);
+    setAudioTracks([]);
+    setSelectedAudioTrackIndex(null);
 
     const currentVideo = queue.find((v) => v.id === id);
     if (currentVideo) {
@@ -293,6 +311,26 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
 
   const handleLoad = useCallback((data: OnLoadData) => {
     setDuration(data.duration);
+    setAudioTracks(data.audioTracks ?? []);
+    // Deliberately does NOT set selectedAudioTrackIndex here — leaving it
+    // null means VideoPlayer passes no explicit selectedAudioTrack override
+    // at all, so the native player keeps using its own automatic default
+    // selection (surfaced for display via audioTracks[].selected) rather
+    // than every load re-applying an explicit override for a track that
+    // was already about to play anyway.
+  }, []);
+
+  // Fires on load and again whenever the native player's own track state
+  // changes (including after a selection we requested actually takes
+  // effect) — keeps `selected` flags true-to-reality for the menu's
+  // checkmarks regardless of whether the current track came from native
+  // default selection or an explicit pick.
+  const handleAudioTracksChanged = useCallback((data: OnAudioTracksData) => {
+    setAudioTracks(data.audioTracks ?? []);
+  }, []);
+
+  const handleSelectAudioTrack = useCallback((index: number) => {
+    setSelectedAudioTrackIndex(index);
   }, []);
 
   const handleProgress = useCallback((data: OnProgressData) => {
@@ -305,13 +343,35 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
 
   const handleError = useCallback(
     (data: OnVideoErrorData) => {
+      const errorString = data.error?.errorString ?? '';
+      // A track the user explicitly switched to can fail to decode on this
+      // specific device (confirmed cause: codecs like Dolby Digital Plus
+      // (E-AC3) have no hardware decoder on most Android devices, and
+      // react-native-video ships no software fallback for licensed Dolby
+      // codecs) even though the video played fine before that switch —
+      // that's a device/codec limitation, not something fixable in JS.
+      // Recover instead of dead-ending on the error screen: clear the
+      // override entirely (selectedAudioTrackIndex !== null is exactly "we
+      // had applied an explicit pick") so the reloaded player goes back to
+      // native automatic selection — the same state that was already
+      // proven working — and force a fresh player instance (ExoPlayer's
+      // error state needs a new source, not just a prop change, to clear).
+      if (/decoder_init_failed/i.test(errorString) && selectedAudioTrackIndex !== null && video) {
+        setSelectedAudioTrackIndex(null);
+        savePosition(video.id, currentTimeRef.current, durationRef.current);
+        setReloadToken((t) => t + 1);
+        Alert.alert(
+          "Can't use that audio track",
+          'This audio track is not supported on this device. Playback switched back to the default one.'
+        );
+        return;
+      }
+
       setErrorMessage(
-        `Can't play "${video?.filename ?? 'this video'}". ${
-          data.error?.errorString ?? 'This format is not supported.'
-        }`
+        `Can't play "${video?.filename ?? 'this video'}". ${errorString || 'This format is not supported.'}`
       );
     },
-    [video]
+    [video, savePosition, selectedAudioTrackIndex]
   );
 
   const seekTo = useCallback(
@@ -451,6 +511,13 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
     ? insets.bottom + bottomControlsTouchHeight + SUBTITLE_CONTROLS_GAP
     : insets.bottom + SUBTITLE_BASE_GAP;
 
+  // For the menu's checkmark: an explicit pick if we've made one, otherwise
+  // whichever track the native player reports as its own current default —
+  // reflects reality either way, since audioTracks is kept live via
+  // onAudioTracks, not just assumed from our own last request.
+  const displayedAudioTrackIndex =
+    selectedAudioTrackIndex ?? audioTracks.find((track) => track.selected)?.index ?? null;
+
   return (
     <View style={styles.container}>
       <StatusBar hidden={!controlsVisible} animated />
@@ -464,7 +531,7 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
       ) : (
         <>
           <VideoPlayer
-            key={video.id}
+            key={`${video.id}-${reloadToken}`}
             ref={videoRef}
             uri={video.uri}
             paused={paused}
@@ -472,12 +539,24 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
             rate={rate}
             loop={loop}
             zoomMode={zoomMode}
-            enterPictureInPictureOnLeave={PIP_SUPPORTED}
+            // Only on the true first mount for this video — a reloadToken
+            // bump (audio-track switch, error recovery) is a brief reinit
+            // mid-playback, where flashing a static thumbnail would read as
+            // a stutter rather than smoothing anything out.
+            posterUri={reloadToken === 0 ? video.thumbnailUri : null}
+            selectedAudioTrackIndex={selectedAudioTrackIndex}
+            // Picture-in-Picture must stay an explicit choice (the PiP
+            // button, via handleEnterPip) — never triggered just by
+            // backgrounding the app. See the AppState listener below for
+            // the corresponding "pause unless PiP was manually entered"
+            // behavior.
+            enterPictureInPictureOnLeave={false}
             onLoad={handleLoad}
             onProgress={handleProgress}
             onBuffer={handleBuffer}
             onEnd={handleEnd}
             onError={handleError}
+            onAudioTracks={handleAudioTracksChanged}
             onPictureInPictureStatusChanged={handlePipStatusChanged}
             onRestoreUserInterfaceForPictureInPictureStop={handleRestoreFromPip}
           />
@@ -536,6 +615,9 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
                 hasManualSubtitleOverride={hasManualSubtitleOverride}
                 onSelectSubtitleFile={handleSelectSubtitleFile}
                 onClearSubtitleOverride={handleClearSubtitleOverride}
+                audioTracks={audioTracks}
+                selectedAudioTrackIndex={displayedAudioTrackIndex}
+                onSelectAudioTrack={handleSelectAudioTrack}
                 volumeLevel={volumeLevel}
                 onSetVolume={setVolume}
                 onBack={handleBack}

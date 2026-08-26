@@ -1,7 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { AudioTrack } from 'react-native-video';
 
 import { useAccentColor } from '@/hooks/useThemePreference';
+import { audioTrackLabel } from '@/utils/audioTracks';
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -18,11 +20,16 @@ type MoreOptionsMenuProps = {
   hasManualSubtitleOverride: boolean;
   onSelectSubtitleFile: () => void;
   onClearSubtitleOverride: () => void;
+  audioTracks: AudioTrack[];
+  selectedAudioTrackIndex: number | null;
+  onSelectAudioTrack: (index: number) => void;
   onLock: () => void;
   pipSupported: boolean;
   onEnterPip: () => void;
   topOffset: number;
   rightOffset: number;
+  bottomOffset: number;
+  leftOffset: number;
 };
 
 export function MoreOptionsMenu({
@@ -38,11 +45,16 @@ export function MoreOptionsMenu({
   hasManualSubtitleOverride,
   onSelectSubtitleFile,
   onClearSubtitleOverride,
+  audioTracks,
+  selectedAudioTrackIndex,
+  onSelectAudioTrack,
   onLock,
   pipSupported,
   onEnterPip,
   topOffset,
   rightOffset,
+  bottomOffset,
+  leftOffset,
 }: MoreOptionsMenuProps) {
   const accentColor = useAccentColor();
 
@@ -53,7 +65,8 @@ export function MoreOptionsMenu({
   return (
     <>
       <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.panel, { top: topOffset, right: rightOffset }]}>
+      <View style={[styles.panel, { top: topOffset, right: rightOffset, bottom: bottomOffset, left: leftOffset }]}>
+      <ScrollView contentContainerStyle={styles.panelContent} showsVerticalScrollIndicator>
         <Text style={styles.sectionLabel}>Speed</Text>
         <View style={styles.speedRow}>
           {SPEED_OPTIONS.map((option) => (
@@ -109,6 +122,29 @@ export function MoreOptionsMenu({
           </Pressable>
         ) : null}
 
+        {audioTracks.length > 1 ? (
+          <>
+            <View style={styles.divider} />
+            <Text style={styles.sectionLabel}>Audio</Text>
+            {audioTracks.map((track) => (
+              <Pressable
+                key={track.index}
+                style={styles.row}
+                onPress={() => {
+                  onClose();
+                  onSelectAudioTrack(track.index);
+                }}>
+                <Ionicons
+                  name={track.index === selectedAudioTrackIndex ? 'radio-button-on' : 'radio-button-off'}
+                  size={18}
+                  color={track.index === selectedAudioTrackIndex ? accentColor : '#fff'}
+                />
+                <Text style={styles.rowText}>{audioTrackLabel(track, track.index)}</Text>
+              </Pressable>
+            ))}
+          </>
+        ) : null}
+
         <View style={styles.divider} />
 
         {pipSupported ? (
@@ -132,6 +168,7 @@ export function MoreOptionsMenu({
           <Ionicons name="lock-closed-outline" size={18} color="#fff" />
           <Text style={styles.rowText}>Lock screen</Text>
         </Pressable>
+      </ScrollView>
       </View>
     </>
   );
@@ -143,9 +180,11 @@ const styles = StyleSheet.create({
   },
   panel: {
     position: 'absolute',
-    width: 220,
     backgroundColor: 'rgba(20,20,20,0.95)',
     borderRadius: 12,
+    overflow: 'hidden',
+  },
+  panelContent: {
     paddingVertical: 10,
     paddingHorizontal: 12,
     gap: 4,

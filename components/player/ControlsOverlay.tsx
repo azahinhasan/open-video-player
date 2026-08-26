@@ -8,6 +8,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { AudioTrack } from 'react-native-video';
 
 import { MoreOptionsMenu } from '@/components/player/MoreOptionsMenu';
 import { SeekBar } from '@/components/player/SeekBar';
@@ -39,6 +40,9 @@ type ControlsOverlayProps = {
   hasManualSubtitleOverride: boolean;
   onSelectSubtitleFile: () => void;
   onClearSubtitleOverride: () => void;
+  audioTracks: AudioTrack[];
+  selectedAudioTrackIndex: number | null;
+  onSelectAudioTrack: (index: number) => void;
   volumeLevel: SharedValue<number>;
   onSetVolume: (value: number) => void;
   onBack: () => void;
@@ -78,6 +82,9 @@ export function ControlsOverlay({
   hasManualSubtitleOverride,
   onSelectSubtitleFile,
   onClearSubtitleOverride,
+  audioTracks,
+  selectedAudioTrackIndex,
+  onSelectAudioTrack,
   volumeLevel,
   onSetVolume,
   onBack,
@@ -241,11 +248,16 @@ export function ControlsOverlay({
         hasManualSubtitleOverride={hasManualSubtitleOverride}
         onSelectSubtitleFile={onSelectSubtitleFile}
         onClearSubtitleOverride={onClearSubtitleOverride}
+        audioTracks={audioTracks}
+        selectedAudioTrackIndex={selectedAudioTrackIndex}
+        onSelectAudioTrack={onSelectAudioTrack}
         onLock={onLock}
         pipSupported={pipSupported}
         onEnterPip={onEnterPip}
         topOffset={insets.top + 48}
         rightOffset={insets.right + 12}
+        bottomOffset={insets.bottom + 12}
+        leftOffset={insets.left + 12}
       />
     </Animated.View>
   );
