@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ToastHost } from '@/components/ToastHost';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
@@ -30,6 +31,7 @@ export default function RootLayout() {
               options={{ headerShown: false, animation: 'fade' }}
             />
           </Stack>
+          <ToastHost />
           <StatusBar style="auto" />
         </ThemeProvider>
       </SafeAreaProvider>

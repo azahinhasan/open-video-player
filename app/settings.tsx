@@ -222,11 +222,16 @@ export default function SettingsScreen() {
           <Switch
             value={vaultBiometricsEnabled}
             onValueChange={setVaultBiometricsEnabled}
-            disabled={!vaultBiometricsAvailable}
             trackColor={{ false: 'rgba(128,128,128,0.3)', true: accentColor }}
             thumbColor="#fff"
           />
         </View>
+        {vaultBiometricsEnabled && !vaultBiometricsAvailable ? (
+          <ThemedText style={[styles.hint, { color: mutedColor }]}>
+            No fingerprint or face unlock is set up on this device yet — the Vault will fall back to your PIN
+            until you add one in your device settings.
+          </ThemedText>
+        ) : null}
         {hasVaultPin ? (
           <>
             <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
@@ -314,6 +319,12 @@ const styles = StyleSheet.create({
   },
   rowSpacer: {
     flex: 1,
+  },
+  hint: {
+    fontSize: typography.size.micro,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    marginTop: -spacing.sm,
   },
   swatchRow: {
     flexDirection: 'row',

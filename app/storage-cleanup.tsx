@@ -11,6 +11,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useAccentColor } from "@/hooks/useThemePreference";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { useToastStore } from "@/hooks/useToastStore";
 import { useVaultStore } from "@/hooks/useVaultStore";
 import { useVideoLibrary } from "@/hooks/useVideoLibrary";
 import { radius, spacing, typography } from "@/theme/tokens";
@@ -143,11 +144,14 @@ export default function StorageCleanupScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setBatchVaultVisible(false);
     const selectedVideos = rows.filter((v) => selectedIds.has(v.id));
-    const { failedCount } = await vaultVideos(
+    const { committedCount, failedCount } = await vaultVideos(
       selectedVideos,
       (v) => folderNameById.get(v.folderId) ?? "Videos",
     );
     exitSelectMode();
+    if (committedCount > 0) {
+      useToastStore.getState().show(`${committedCount} video${committedCount === 1 ? "" : "s"} moved to Vault`);
+    }
     if (failedCount > 0) {
       Alert.alert(
         "Couldn't move all to Vault",

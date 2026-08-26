@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { useAccentColor } from '@/hooks/useThemePreference';
@@ -23,6 +23,7 @@ export function RenameSheet({ visible, currentFilename, onCancel, onConfirm }: R
   const { base, extension } = splitFilename(currentFilename);
   const [value, setValue] = useState(base);
   const inputRef = useRef<TextInput>(null);
+  const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -31,6 +32,16 @@ export function RenameSheet({ visible, currentFilename, onCancel, onConfirm }: R
     // Only reset when the sheet opens (or targets a different file) — not on every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, currentFilename]);
+
+  // Cancels the pending auto-focus (below) if the sheet closes or the
+  // component unmounts before it fires.
+  useEffect(() => {
+    return () => {
+      if (focusTimerRef.current) {
+        clearTimeout(focusTimerRef.current);
+      }
+    };
+  }, [visible]);
 
   const trimmed = value.trim();
   const canSave = trimmed.length > 0 && `${trimmed}${extension}` !== currentFilename;
@@ -41,51 +52,56 @@ export function RenameSheet({ visible, currentFilename, onCancel, onConfirm }: R
       transparent
       animationType="fade"
       onRequestClose={onCancel}
-      onShow={() => inputRef.current?.focus()}>
-      <KeyboardAvoidingView style={styles.flexFill} behavior="height">
-        <Pressable style={styles.backdrop} onPress={onCancel}>
-          <Pressable
-            style={[styles.sheet, { backgroundColor: surfaceColor, borderColor }]}
-            onPress={(e) => e.stopPropagation()}>
-            <View style={styles.handle} />
+      // React Native's Modal already sets its own Android window to
+      // SOFT_INPUT_ADJUST_RESIZE, so the window itself shrinks around the
+      // keyboard automatically — wrapping this in a KeyboardAvoidingView on
+      // top of that fought over the same resize and caused the sheet to
+      // visibly jump/oscillate. A short delay here lets that native resize
+      // (and the modal's own fade-in) settle before focus is requested, so
+      // the keyboard reliably opens on the first tap instead of sometimes not
+      // triggering at all.
+      onShow={() => {
+        focusTimerRef.current = setTimeout(() => inputRef.current?.focus(), 50);
+      }}>
+      <Pressable style={styles.backdrop} onPress={onCancel}>
+        <Pressable
+          style={[styles.sheet, { backgroundColor: surfaceColor, borderColor }]}
+          onPress={(e) => e.stopPropagation()}>
+          <View style={styles.handle} />
 
-            <ThemedText style={styles.title}>Rename video</ThemedText>
+          <ThemedText style={styles.title}>Rename video</ThemedText>
 
-            <View style={[styles.inputRow, { borderColor }]}>
-              <TextInput
-                ref={inputRef}
-                style={[styles.input, { color: textColor }]}
-                value={value}
-                onChangeText={setValue}
-                selectTextOnFocus
-                placeholder="File name"
-                placeholderTextColor={mutedColor}
-              />
-              {extension ? <Text style={[styles.extension, { color: mutedColor }]}>{extension}</Text> : null}
-            </View>
+          <View style={[styles.inputRow, { borderColor }]}>
+            <TextInput
+              ref={inputRef}
+              style={[styles.input, { color: textColor }]}
+              value={value}
+              onChangeText={setValue}
+              selectTextOnFocus
+              placeholder="File name"
+              placeholderTextColor={mutedColor}
+            />
+            {extension ? <Text style={[styles.extension, { color: mutedColor }]}>{extension}</Text> : null}
+          </View>
 
-            <View style={styles.actionsRow}>
-              <Pressable style={styles.cancelButton} onPress={onCancel}>
-                <ThemedText style={styles.cancelLabel}>Cancel</ThemedText>
-              </Pressable>
-              <Pressable
-                style={[styles.confirmButton, { backgroundColor: accentColor, opacity: canSave ? 1 : 0.4 }]}
-                disabled={!canSave}
-                onPress={() => onConfirm(trimmed)}>
-                <Text style={styles.confirmLabel}>Save</Text>
-              </Pressable>
-            </View>
-          </Pressable>
+          <View style={styles.actionsRow}>
+            <Pressable style={styles.cancelButton} onPress={onCancel}>
+              <ThemedText style={styles.cancelLabel}>Cancel</ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.confirmButton, { backgroundColor: accentColor, opacity: canSave ? 1 : 0.4 }]}
+              disabled={!canSave}
+              onPress={() => onConfirm(trimmed)}>
+              <Text style={styles.confirmLabel}>Save</Text>
+            </Pressable>
+          </View>
         </Pressable>
-      </KeyboardAvoidingView>
+      </Pressable>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  flexFill: {
-    flex: 1,
-  },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

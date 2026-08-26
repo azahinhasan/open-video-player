@@ -2,11 +2,32 @@ import { Directory, File, Paths } from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import * as Crypto from 'expo-crypto';
+import MediaVaultDelete from 'media-vault-delete';
 
 import type { VideoAsset } from '@/types/video';
 import type { VaultEntry, VaultPendingOp } from '@/types/vault';
 import { splitFilename } from '@/utils/renameVideo';
 import { readVaultIndex, readVaultPending, writeVaultIndex, writeVaultPending } from '@/utils/vaultIndex';
+
+/**
+ * Deletes the given MediaStore video assets + their underlying files,
+ * showing Android's system delete-consent dialog once for the whole batch.
+ * Backed by the local `media-vault-delete` native module (see
+ * modules/media-vault-delete), which calls `MediaStore.createDeleteRequest`
+ * directly rather than relying on expo-media-library's internal handling of
+ * that same flow — this app's minSdkVersion is 31 (Android 12), so the
+ * createDeleteRequest path (API 30+) is the only one ever reachable; there's
+ * no need to also branch for the Android 10 RecoverableSecurityException
+ * flow or the legacy pre-scoped-storage delete, since this app can't
+ * install on those OS versions at all.
+ */
+async function deleteOriginalAssets(assetIds: string[]): Promise<boolean> {
+  try {
+    return await MediaVaultDelete.deleteAssetsAsync(assetIds);
+  } catch {
+    return false;
+  }
+}
 
 function vaultDirectory(): Directory {
   const dir = new Directory(Paths.document, 'vault');
@@ -175,11 +196,11 @@ export type MoveToVaultResult =
 
 /**
  * Moves a single video into the vault: copy bytes into private storage,
- * delete the original + its MediaStore entry (via the same
- * expo-media-library call the rest of the app already uses for deletion),
- * then commit the vault index entry. If the delete is declined/fails, rolls
- * the copy back so neither both copies nor an unconfirmed private copy is
- * ever left behind.
+ * delete the original + its MediaStore entry (via the media-vault-delete
+ * native module, which shows the Android delete-consent dialog), then
+ * commit the vault index entry. If the delete is declined/fails, rolls the
+ * copy back so neither both copies nor an unconfirmed private copy is ever
+ * left behind.
  */
 export async function moveToVault(video: VideoAsset, originalFolder: string): Promise<MoveToVaultResult> {
   const prepared = await prepareVaultCopy(video, originalFolder);
@@ -187,12 +208,7 @@ export async function moveToVault(video: VideoAsset, originalFolder: string): Pr
     return { ok: false, reason: 'copy-failed' };
   }
 
-  let deleted = false;
-  try {
-    deleted = await MediaLibrary.deleteAssetsAsync([video.id]);
-  } catch {
-    deleted = false;
-  }
+  const deleted = await deleteOriginalAssets([video.id]);
 
   if (!deleted) {
     deleteVaultFiles(prepared.entry);
@@ -220,13 +236,13 @@ export type MoveManyToVaultResult = {
 
 /**
  * Batch version of moveToVault. Copies every video first, then issues ONE
- * MediaLibrary.deleteAssetsAsync call for all of them together — Android's
- * delete-consent dialog covers a whole batch of ids in one prompt, so doing
- * this one-at-a-time would show the user N separate system dialogs instead
- * of one. If the batch delete is declined, every prepared copy is rolled
- * back (Android doesn't report which items were/weren't deleted, so a
- * non-true result is treated as "nothing was deleted" — matching how
- * hooks/useVideoLibrary.ts's own deleteVideos() already treats it).
+ * delete call for all of them together — Android's delete-consent dialog
+ * covers a whole batch of ids in one prompt, so doing this one-at-a-time
+ * would show the user N separate system dialogs instead of one. If the
+ * batch delete is declined, every prepared copy is rolled back (Android
+ * doesn't report which items were/weren't deleted, so a non-true result is
+ * treated as "nothing was deleted" — matching how hooks/useVideoLibrary.ts's
+ * own deleteVideos() already treats expo-media-library's version of this).
  */
 export async function moveManyToVault(
   videos: VideoAsset[],
@@ -248,12 +264,7 @@ export async function moveManyToVault(
     return { committed: [], failedCount };
   }
 
-  let deleted = false;
-  try {
-    deleted = await MediaLibrary.deleteAssetsAsync(prepared.map((p) => p.video.id));
-  } catch {
-    deleted = false;
-  }
+  const deleted = await deleteOriginalAssets(prepared.map((p) => p.video.id));
 
   if (!deleted) {
     for (const { entry } of prepared) {
@@ -321,6 +332,21 @@ export async function moveOutOfVault(entry: VaultEntry): Promise<MoveOutOfVaultR
   clearPendingOp('vault-out', entry.id);
 
   return { ok: true };
+}
+
+/**
+ * Permanently deletes a vaulted video — no MediaStore interaction, no
+ * restore, irreversible. Unlike moveToVault/moveOutOfVault there's no
+ * "recreate" step this could race with, so it doesn't need the pending
+ * journal: the index entry is dropped first (so the UI can never show a
+ * phantom entry pointing at a file that's already gone), then the files are
+ * cleaned up. If a crash lands between those two steps, the only possible
+ * leftover is an orphaned, unreferenced file on disk — never a broken list
+ * entry and never data thought-deleted-but-not.
+ */
+export function deleteVaultEntry(entry: VaultEntry): void {
+  writeVaultIndex(readVaultIndex().filter((e) => e.id !== entry.id));
+  deleteVaultFiles(entry);
 }
 
 /**
