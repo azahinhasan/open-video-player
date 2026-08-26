@@ -9,8 +9,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChapterRail } from '@/components/player/ChapterRail';
 import { MoreOptionsMenu } from '@/components/player/MoreOptionsMenu';
+import { SeekBar } from '@/components/player/SeekBar';
 import { MuteButton } from '@/components/player/MuteButton';
 import { usePlaybackPreferences } from '@/hooks/usePlaybackPreferences';
 import { useAccentColor } from '@/hooks/useThemePreference';
@@ -188,7 +188,7 @@ export function ControlsOverlay({
           { paddingBottom: insets.bottom + 14, paddingLeft: insets.left, paddingRight: insets.right },
         ]}
         pointerEvents="box-none">
-        <ChapterRail
+        <SeekBar
           videoUri={videoUri}
           videoId={videoId}
           duration={duration}

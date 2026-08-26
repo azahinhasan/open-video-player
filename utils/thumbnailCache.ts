@@ -23,21 +23,27 @@ export async function generateThumbnail(videoUri: string, id: string): Promise<s
   }
 }
 
-function chapterThumbnailsDirectory(): Directory {
-  const dir = new Directory(Paths.cache, 'thumbnails/chapters');
+function seekPreviewThumbnailsDirectory(): Directory {
+  const dir = new Directory(Paths.cache, 'thumbnails/seek-preview');
   if (!dir.exists) {
     dir.create({ intermediates: true, idempotent: true });
   }
   return dir;
 }
 
-export async function generateChapterThumbnail(
+/**
+ * Thumbnail for the seek bar's drag-preview bubble. `bucketIndex` divides
+ * the video into SeekBar's PREVIEW_BUCKETS equal slices purely so nearby
+ * drag positions reuse the same cached frame instead of regenerating one on
+ * every pixel of movement — it doesn't correspond to anything shown in the UI.
+ */
+export async function generateSeekPreviewThumbnail(
   videoUri: string,
   videoId: string,
-  chapterIndex: number,
+  bucketIndex: number,
   timeMs: number
 ): Promise<string | null> {
-  const destination = new File(chapterThumbnailsDirectory(), `${videoId}-${chapterIndex}.jpg`);
+  const destination = new File(seekPreviewThumbnailsDirectory(), `${videoId}-${bucketIndex}.jpg`);
   if (destination.exists) {
     return destination.uri;
   }

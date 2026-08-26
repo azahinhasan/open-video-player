@@ -37,9 +37,9 @@ type GestureLayerProps = {
   onToggleControls: () => void;
   /**
    * Height, in points, to leave uncovered at the bottom of the screen.
-   * The Chapter Rail lives there and has its own GestureDetector — without
+   * The SeekBar lives there and has its own GestureDetector — without
    * this gap, this component's full-screen zones compete with it for quick
-   * taps (a sustained drag on the rail wins the race easily, but a tap is a
+   * taps (a sustained drag on the seek bar wins the race easily, but a tap is a
    * genuine coin flip between the two independent gesture trees). Pass 0
    * when the bottom bar isn't actually on screen (controls hidden) so this
    * layer reclaims full-height coverage for tap-to-reveal.

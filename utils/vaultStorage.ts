@@ -37,6 +37,49 @@ function vaultDirectory(): Directory {
   return dir;
 }
 
+const RESTORE_FALLBACK_ALBUM_NAME = 'DCIM';
+
+/**
+ * Scratch directory for un-vaulting only — holds a short-lived copy of a
+ * vault file under its ORIGINAL filename (see moveOutOfVault) so
+ * MediaLibrary.createAssetAsync, which derives the public display name from
+ * the source uri's own filename, doesn't hand the video back with its
+ * private vault/ UUID name instead of the name the user knows it by.
+ */
+function restoreTempDirectory(): Directory {
+  const dir = new Directory(Paths.cache, 'vault-restore');
+  if (!dir.exists) {
+    dir.create({ intermediates: true, idempotent: true });
+  }
+  return dir;
+}
+
+/**
+ * Finds the album (folder) a restored video should land in: the one it was
+ * originally vaulted from, if that folder still exists, otherwise DCIM as a
+ * standard, always-present fallback. Deliberately never creates/recreates
+ * the original folder — createAssetAsync requires the target album to
+ * already exist, and conjuring a new folder that may no longer mean
+ * anything to the user (its last video may have been the one now returning)
+ * isn't the same guarantee as "it went back where it came from".
+ */
+async function findRestoreAlbum(originalFolder: string): Promise<MediaLibrary.Album | undefined> {
+  try {
+    const original = await MediaLibrary.getAlbumAsync(originalFolder);
+    if (original) {
+      return original;
+    }
+  } catch {
+    // Fall through to the DCIM fallback below.
+  }
+  try {
+    const fallback = await MediaLibrary.getAlbumAsync(RESTORE_FALLBACK_ALBUM_NAME);
+    return fallback ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function vaultThumbnailsDirectory(): Directory {
   const dir = new Directory(vaultDirectory(), 'thumbnails');
   if (!dir.exists) {
@@ -298,20 +341,37 @@ export async function moveManyToVault(
 export type MoveOutOfVaultResult = { ok: true } | { ok: false; reason: 'create-failed' };
 
 /**
- * Reverses moveToVault: writes the file back into shared storage (re-indexed
- * into MediaStore via createAssetAsync, landing in the OS's default video
- * location), then removes the private copy + index entry. Only deletes the
- * vault copy after createAssetAsync succeeds, so a crash mid-restore never
- * loses the video — at worst it can be retried.
+ * Reverses moveToVault: writes the file back into shared storage under its
+ * ORIGINAL filename (re-indexed into MediaStore via createAssetAsync, into
+ * the folder it was vaulted from if that still exists, else DCIM), then
+ * removes the private copy + index entry. Only deletes the vault copy after
+ * createAssetAsync succeeds, so a crash mid-restore never loses the video —
+ * at worst it can be retried.
  */
 export async function moveOutOfVault(entry: VaultEntry): Promise<MoveOutOfVaultResult> {
   writeSinglePendingOp({ kind: 'vault-out', stage: 'restoring', entryId: entry.id, startedAt: Date.now() });
 
+  // createAssetAsync derives the public display name from the source uri's
+  // own filename, and the vault's on-disk file is deliberately named by
+  // UUID (not the original name — see moveToVault) for privacy while it's
+  // still vaulted. A short-lived temp copy under the original name is the
+  // only way to hand MediaStore back the name the user actually knows it
+  // by; it's deleted in `finally` regardless of outcome.
+  const tempFile = new File(restoreTempDirectory(), entry.originalFilename);
   let asset: MediaLibrary.Asset | null = null;
   try {
-    asset = await MediaLibrary.createAssetAsync(vaultFileFor(entry).uri);
+    if (tempFile.exists) {
+      tempFile.delete();
+    }
+    vaultFileFor(entry).copy(tempFile);
+    const album = await findRestoreAlbum(entry.originalFolder);
+    asset = await MediaLibrary.createAssetAsync(tempFile.uri, album);
   } catch {
     asset = null;
+  } finally {
+    if (tempFile.exists) {
+      tempFile.delete();
+    }
   }
 
   if (!asset) {

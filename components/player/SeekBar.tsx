@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -10,16 +9,14 @@ import Animated, {
   useDerivedValue,
   useSharedValue,
   withTiming,
-  type DerivedValue,
 } from 'react-native-reanimated';
 
 import { useAccentColor } from '@/hooks/useThemePreference';
 import { playerColors } from '@/theme/tokens';
-import { getChapters, type Chapter } from '@/utils/chapters';
 import { formatTime } from '@/utils/formatTime';
-import { generateChapterThumbnail } from '@/utils/thumbnailCache';
+import { generateSeekPreviewThumbnail } from '@/utils/thumbnailCache';
 
-type ChapterRailProps = {
+type SeekBarProps = {
   videoUri: string;
   videoId: string;
   duration: number;
@@ -30,7 +27,13 @@ type ChapterRailProps = {
   onScrubEnd?: () => void;
 };
 
-export function ChapterRail({
+// Divides the video into fixed slices purely for scrub-preview thumbnail
+// caching — dragging across many nearby positions reuses the same cached
+// frame instead of generating a new one on every pixel of movement. Not a
+// visible segment/chapter boundary; the bar itself is one continuous track.
+const PREVIEW_BUCKETS = 40;
+
+export function SeekBar({
   videoUri,
   videoId,
   duration,
@@ -39,8 +42,7 @@ export function ChapterRail({
   onSeek,
   onScrubStart,
   onScrubEnd,
-}: ChapterRailProps) {
-  const chapters = useMemo(() => getChapters(duration), [duration]);
+}: SeekBarProps) {
   const accentColor = useAccentColor();
 
   const railWidth = useSharedValue(0);
@@ -48,7 +50,7 @@ export function ChapterRail({
   const dragFraction = useSharedValue(0);
   const isDragging = useSharedValue(false);
 
-  const [previewChapterIndex, setPreviewChapterIndex] = useState<number | null>(null);
+  const [previewBucket, setPreviewBucket] = useState<number | null>(null);
   const [previewSeconds, setPreviewSeconds] = useState(0);
   const [previewThumbnail, setPreviewThumbnail] = useState<string | null>(null);
   const thumbnailCacheRef = useRef<Record<number, string | null>>({});
@@ -61,10 +63,6 @@ export function ChapterRail({
     isDragging.value ? dragFraction.value : progressFraction.value
   );
 
-  const triggerSegmentHaptic = useCallback(() => {
-    Haptics.selectionAsync().catch(() => {});
-  }, []);
-
   useAnimatedReaction(
     () => Math.floor(dragFraction.value * duration),
     (seconds, previous) => {
@@ -76,47 +74,28 @@ export function ChapterRail({
   );
 
   useAnimatedReaction(
-    () => {
-      if (chapters.length === 0) {
-        return -1;
-      }
-      const idx = Math.floor(dragFraction.value * chapters.length);
-      return Math.min(chapters.length - 1, Math.max(0, idx));
-    },
-    (index, previous) => {
-      if (index !== previous) {
-        runOnJS(setPreviewChapterIndex)(index);
-        // previous === null is the reaction's initial fire (not a real crossing);
-        // only tick while an actual drag is in progress.
-        if (previous !== null && isDragging.value) {
-          runOnJS(triggerSegmentHaptic)();
-        }
+    () => (duration > 0 ? Math.min(PREVIEW_BUCKETS - 1, Math.floor(dragFraction.value * PREVIEW_BUCKETS)) : -1),
+    (bucket, previous) => {
+      if (bucket !== previous) {
+        runOnJS(setPreviewBucket)(bucket);
       }
     },
-    [chapters.length]
+    [duration]
   );
 
   useEffect(() => {
-    if (previewChapterIndex === null) {
+    if (previewBucket === null || duration <= 0) {
       return;
     }
-    const cached = thumbnailCacheRef.current[previewChapterIndex];
+    const cached = thumbnailCacheRef.current[previewBucket];
     if (cached !== undefined) {
       setPreviewThumbnail(cached);
       return;
     }
-    const chapter = chapters[previewChapterIndex];
-    if (!chapter) {
-      return;
-    }
     let cancelled = false;
-    generateChapterThumbnail(
-      videoUri,
-      videoId,
-      previewChapterIndex,
-      Math.floor(chapter.startTime * 1000) + 500
-    ).then((uri) => {
-      thumbnailCacheRef.current[previewChapterIndex] = uri;
+    const timeSeconds = ((previewBucket + 0.5) / PREVIEW_BUCKETS) * duration;
+    generateSeekPreviewThumbnail(videoUri, videoId, previewBucket, Math.floor(timeSeconds * 1000)).then((uri) => {
+      thumbnailCacheRef.current[previewBucket] = uri;
       if (!cancelled) {
         setPreviewThumbnail(uri);
       }
@@ -124,7 +103,7 @@ export function ChapterRail({
     return () => {
       cancelled = true;
     };
-  }, [previewChapterIndex, chapters, videoUri, videoId]);
+  }, [previewBucket, duration, videoUri, videoId]);
 
   const commitSeek = useCallback(
     (fraction: number) => {
@@ -168,6 +147,11 @@ export function ChapterRail({
     left: `${dragFraction.value * 100}%`,
   }));
 
+  const fillStyle = useAnimatedStyle(() => ({
+    width: `${displayFraction.value * 100}%`,
+    backgroundColor: accentColor,
+  }));
+
   const playheadStyle = useAnimatedStyle(() => ({
     left: `${displayFraction.value * 100}%`,
   }));
@@ -193,15 +177,8 @@ export function ChapterRail({
             <Text style={styles.previewTime}>{formatTime(previewSeconds)}</Text>
           </Animated.View>
 
-          <View style={styles.rail}>
-            {chapters.map((chapter) => (
-              <ChapterSegment
-                key={chapter.index}
-                chapter={chapter}
-                displayFraction={displayFraction}
-                accentColor={accentColor}
-              />
-            ))}
+          <View style={styles.track}>
+            <Animated.View style={[styles.fill, fillStyle]} />
           </View>
           {buffering ? (
             <Animated.View style={[styles.bufferingDot, playheadStyle]} pointerEvents="none" />
@@ -209,49 +186,6 @@ export function ChapterRail({
         </View>
       </GestureDetector>
     </View>
-  );
-}
-
-function ChapterSegment({
-  chapter,
-  displayFraction,
-  accentColor,
-}: {
-  chapter: Chapter;
-  displayFraction: DerivedValue<number>;
-  accentColor: string;
-}) {
-  const fillStyle = useAnimatedStyle(() => {
-    const frac = displayFraction.value;
-    let filled = 0;
-    if (frac >= chapter.endFraction) {
-      filled = 1;
-    } else if (frac > chapter.startFraction) {
-      filled = (frac - chapter.startFraction) / (chapter.endFraction - chapter.startFraction);
-    }
-    const isCurrent = frac >= chapter.startFraction && frac < chapter.endFraction;
-    return {
-      width: `${filled * 100}%`,
-      backgroundColor: isCurrent ? accentColor : playerColors.chapterWatched,
-    };
-  });
-
-  const trackStyle = useAnimatedStyle(() => {
-    const frac = displayFraction.value;
-    const isCurrent = frac >= chapter.startFraction && frac < chapter.endFraction;
-    const isUpcoming = frac < chapter.startFraction;
-    return {
-      opacity: isCurrent ? 1 : 0.85,
-      backgroundColor: isUpcoming ? 'transparent' : playerColors.chapterWatched,
-      borderColor: playerColors.chapterUpcoming,
-      borderWidth: isUpcoming ? 1 : 0,
-    };
-  });
-
-  return (
-    <Animated.View style={[styles.segmentTrack, trackStyle]}>
-      <Animated.View style={[styles.segmentFill, fillStyle]} />
-    </Animated.View>
   );
 }
 
@@ -263,18 +197,13 @@ const styles = StyleSheet.create({
     height: 32,
     justifyContent: 'center',
   },
-  rail: {
-    flexDirection: 'row',
+  track: {
     height: 6,
-    gap: 3,
-  },
-  segmentTrack: {
-    flex: 1,
-    height: '100%',
     borderRadius: 3,
     overflow: 'hidden',
+    backgroundColor: playerColors.seekTrack,
   },
-  segmentFill: {
+  fill: {
     height: '100%',
     borderRadius: 3,
   },

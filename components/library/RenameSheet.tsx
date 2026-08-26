@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
 import { useAccentColor } from '@/hooks/useThemePreference';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { radius, spacing, typography } from '@/theme/tokens';
 import { splitFilename } from '@/utils/renameVideo';
+
+const KEYBOARD_MARGIN_ANIM_MS = 200;
 
 type RenameSheetProps = {
   visible: boolean;
@@ -24,6 +27,7 @@ export function RenameSheet({ visible, currentFilename, onCancel, onConfirm }: R
   const [value, setValue] = useState(base);
   const inputRef = useRef<TextInput>(null);
   const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keyboardHeight = useSharedValue(0);
 
   useEffect(() => {
     if (visible) {
@@ -43,6 +47,34 @@ export function RenameSheet({ visible, currentFilename, onCancel, onConfirm }: R
     };
   }, [visible]);
 
+  // Modal's own SOFT_INPUT_ADJUST_RESIZE window resize doesn't reliably
+  // reach this dialog's hosted RN content on Android (a known Modal
+  // limitation, confirmed on-device — the sheet just sat there, unmoved, as
+  // the keyboard covered it). Tracking keyboard height directly and
+  // applying it as the sheet's own bottom margin is the actual fix: the
+  // margin grows in step with the keyboard opening and collapses back to 0
+  // the moment it closes, scoped to only run while this sheet is visible.
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+    const showSub = Keyboard.addListener('keyboardDidShow', (event) => {
+      keyboardHeight.value = withTiming(event.endCoordinates.height, { duration: KEYBOARD_MARGIN_ANIM_MS });
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      keyboardHeight.value = withTiming(0, { duration: KEYBOARD_MARGIN_ANIM_MS });
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+      keyboardHeight.value = 0;
+    };
+  }, [visible, keyboardHeight]);
+
+  const keyboardMarginStyle = useAnimatedStyle(() => ({
+    marginBottom: keyboardHeight.value,
+  }));
+
   const trimmed = value.trim();
   const canSave = trimmed.length > 0 && `${trimmed}${extension}` !== currentFilename;
 
@@ -52,50 +84,47 @@ export function RenameSheet({ visible, currentFilename, onCancel, onConfirm }: R
       transparent
       animationType="fade"
       onRequestClose={onCancel}
-      // React Native's Modal already sets its own Android window to
-      // SOFT_INPUT_ADJUST_RESIZE, so the window itself shrinks around the
-      // keyboard automatically — wrapping this in a KeyboardAvoidingView on
-      // top of that fought over the same resize and caused the sheet to
-      // visibly jump/oscillate. A short delay here lets that native resize
-      // (and the modal's own fade-in) settle before focus is requested, so
-      // the keyboard reliably opens on the first tap instead of sometimes not
-      // triggering at all.
+      // A short delay here lets the modal's own fade-in settle before focus
+      // is requested, so the keyboard reliably opens on the first tap
+      // instead of sometimes not triggering at all.
       onShow={() => {
         focusTimerRef.current = setTimeout(() => inputRef.current?.focus(), 50);
       }}>
       <Pressable style={styles.backdrop} onPress={onCancel}>
-        <Pressable
-          style={[styles.sheet, { backgroundColor: surfaceColor, borderColor }]}
-          onPress={(e) => e.stopPropagation()}>
-          <View style={styles.handle} />
+        <Animated.View style={keyboardMarginStyle}>
+          <Pressable
+            style={[styles.sheet, { backgroundColor: surfaceColor, borderColor }]}
+            onPress={(e) => e.stopPropagation()}>
+            <View style={styles.handle} />
 
-          <ThemedText style={styles.title}>Rename video</ThemedText>
+            <ThemedText style={styles.title}>Rename video</ThemedText>
 
-          <View style={[styles.inputRow, { borderColor }]}>
-            <TextInput
-              ref={inputRef}
-              style={[styles.input, { color: textColor }]}
-              value={value}
-              onChangeText={setValue}
-              selectTextOnFocus
-              placeholder="File name"
-              placeholderTextColor={mutedColor}
-            />
-            {extension ? <Text style={[styles.extension, { color: mutedColor }]}>{extension}</Text> : null}
-          </View>
+            <View style={[styles.inputRow, { borderColor }]}>
+              <TextInput
+                ref={inputRef}
+                style={[styles.input, { color: textColor }]}
+                value={value}
+                onChangeText={setValue}
+                selectTextOnFocus
+                placeholder="File name"
+                placeholderTextColor={mutedColor}
+              />
+              {extension ? <Text style={[styles.extension, { color: mutedColor }]}>{extension}</Text> : null}
+            </View>
 
-          <View style={styles.actionsRow}>
-            <Pressable style={styles.cancelButton} onPress={onCancel}>
-              <ThemedText style={styles.cancelLabel}>Cancel</ThemedText>
-            </Pressable>
-            <Pressable
-              style={[styles.confirmButton, { backgroundColor: accentColor, opacity: canSave ? 1 : 0.4 }]}
-              disabled={!canSave}
-              onPress={() => onConfirm(trimmed)}>
-              <Text style={styles.confirmLabel}>Save</Text>
-            </Pressable>
-          </View>
-        </Pressable>
+            <View style={styles.actionsRow}>
+              <Pressable style={styles.cancelButton} onPress={onCancel}>
+                <ThemedText style={styles.cancelLabel}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmButton, { backgroundColor: accentColor, opacity: canSave ? 1 : 0.4 }]}
+                disabled={!canSave}
+                onPress={() => onConfirm(trimmed)}>
+                <Text style={styles.confirmLabel}>Save</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   );

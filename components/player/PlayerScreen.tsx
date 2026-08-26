@@ -27,9 +27,9 @@ import type { VideoAsset } from '@/types/video';
 
 const AUTO_HIDE_DELAY_MS = 3000;
 const ZOOM_CYCLE: VideoZoomMode[] = ['contain', 'cover', 'stretch'];
-// Generously covers the Chapter Rail's touch area plus the time row beneath
-// it, so GestureLayer's full-screen zones don't compete with the rail's own
-// gesture for taps while the bottom bar is actually on screen. When the
+// Generously covers the SeekBar's touch area plus the time row beneath
+// it, so GestureLayer's full-screen zones don't compete with the seek bar's
+// own gesture for taps while the bottom bar is actually on screen. When the
 // transport buttons also live down there (controlsLayout: 'bottom'), the
 // zone needs to grow to cover that extra row too, for the same reason.
 const BOTTOM_CONTROLS_TOUCH_HEIGHT_CENTER = 110;

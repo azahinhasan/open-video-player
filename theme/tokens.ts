@@ -46,8 +46,9 @@ const palette = {
 // Player overlay is always dark regardless of app theme (video content is
 // conventionally framed in a dark surface), so these don't split by light/dark.
 export const playerColors = {
-  chapterWatched: '#4A4A46',
-  chapterUpcoming: '#3A3A38',
+  // Seek bar's unplayed track — the played portion is filled with the
+  // user's accent color instead, same as everywhere else "progress" shows.
+  seekTrack: '#4A4A46',
 } as const;
 
 export const themeColors = {

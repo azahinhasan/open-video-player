@@ -2,7 +2,7 @@
   "expo": {
     "name": "Open Video Player",
     "slug": "video-player-app",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/splash-icon-tomato-2048.png",
     "scheme": "videoplayerappmobile",
@@ -42,9 +42,7 @@
           "photosPermission": "Allow $(PRODUCT_NAME) to access your videos.",
           "savePhotosPermission": "Allow $(PRODUCT_NAME) to save videos.",
           "isAccessMediaLocationEnabled": false,
-          "granularPermissions": [
-            "video"
-          ]
+          "granularPermissions": ["video"]
         }
       ],
       "expo-secure-store"
