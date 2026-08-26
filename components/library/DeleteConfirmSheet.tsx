@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useAccentColor } from '@/hooks/useThemePreference';
 import { radius, spacing, typography } from '@/theme/tokens';
 
 type DeleteConfirmSheetProps = {
@@ -11,6 +12,9 @@ type DeleteConfirmSheetProps = {
   subtitle?: string;
   thumbnailUri?: string | null;
   confirmLabel?: string;
+  /** 'accent' is used for non-destructive-but-consequential actions, e.g. moving to the Vault. Defaults to 'danger'. */
+  tone?: 'danger' | 'accent';
+  warningText?: string;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -21,6 +25,8 @@ export function DeleteConfirmSheet({
   subtitle,
   thumbnailUri,
   confirmLabel = 'Delete',
+  tone = 'danger',
+  warningText = "This can't be undone.",
   onCancel,
   onConfirm,
 }: DeleteConfirmSheetProps) {
@@ -29,6 +35,8 @@ export function DeleteConfirmSheet({
   const textColor = useThemeColor({}, 'text');
   const mutedColor = useThemeColor({}, 'textMuted');
   const dangerColor = useThemeColor({}, 'danger');
+  const accentColor = useAccentColor();
+  const confirmColor = tone === 'accent' ? accentColor : dangerColor;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
@@ -58,13 +66,13 @@ export function DeleteConfirmSheet({
             </View>
           </View>
 
-          <Text style={[styles.warning, { color: mutedColor }]}>This can&apos;t be undone.</Text>
+          <Text style={[styles.warning, { color: mutedColor }]}>{warningText}</Text>
 
           <View style={styles.actionsRow}>
             <Pressable style={styles.cancelButton} onPress={onCancel}>
               <Text style={[styles.cancelLabel, { color: textColor }]}>Cancel</Text>
             </Pressable>
-            <Pressable style={[styles.confirmButton, { backgroundColor: dangerColor }]} onPress={onConfirm}>
+            <Pressable style={[styles.confirmButton, { backgroundColor: confirmColor }]} onPress={onConfirm}>
               <Text style={styles.confirmLabel}>{confirmLabel}</Text>
             </Pressable>
           </View>

@@ -17,6 +17,7 @@ import { useSortPreference, type SortMode } from '@/hooks/useSortPreference';
 import { usePlaybackStore } from '@/hooks/usePlaybackStore';
 import { useAccentColor } from '@/hooks/useThemePreference';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useVaultStore } from '@/hooks/useVaultStore';
 import { useVideoLibrary } from '@/hooks/useVideoLibrary';
 import { useViewMode } from '@/hooks/useViewMode';
 import type { VideoAsset } from '@/types/video';
@@ -44,6 +45,7 @@ function sortVideos(videos: VideoAsset[], mode: SortMode): VideoAsset[] {
 export default function FolderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { folders, videosForFolder, updateVideoMeta, deleteVideos, status, rescan } = useVideoLibrary();
+  const { vaultVideos } = useVaultStore();
   const setQueue = usePlaybackStore((s) => s.setQueue);
   const { viewMode, toggleViewMode } = useViewMode();
   const sortMode = useSortPreference((s) => s.sortMode);
@@ -57,6 +59,8 @@ export default function FolderScreen() {
   const [renameVideo, setRenameVideo] = useState<VideoAsset | null>(null);
   const [deleteVideo, setDeleteVideo] = useState<VideoAsset | null>(null);
   const [batchDeleteVisible, setBatchDeleteVisible] = useState(false);
+  const [vaultVideo, setVaultVideo] = useState<VideoAsset | null>(null);
+  const [batchVaultVisible, setBatchVaultVisible] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -142,6 +146,33 @@ export default function FolderScreen() {
     }
   }, [selectedIds, deleteVideos, exitSelectMode]);
 
+  const handleConfirmVault = useCallback(async () => {
+    if (!vaultVideo) {
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setVaultVideo(null);
+    const { committedCount, failedCount } = await vaultVideos([vaultVideo], () => folder?.name ?? 'Videos');
+    if (committedCount === 0 && failedCount > 0) {
+      Alert.alert("Couldn't move to Vault", 'The video was not moved. Please try again.');
+    }
+  }, [vaultVideo, vaultVideos, folder]);
+
+  const handleConfirmBatchVault = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) {
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setBatchVaultVisible(false);
+    const selectedVideos = videos.filter((v) => selectedIds.has(v.id));
+    const { failedCount } = await vaultVideos(selectedVideos, () => folder?.name ?? 'Videos');
+    exitSelectMode();
+    if (failedCount > 0) {
+      Alert.alert("Couldn't move all to Vault", `${failedCount} video${failedCount === 1 ? '' : 's'} could not be moved.`);
+    }
+  }, [selectedIds, videos, vaultVideos, folder, exitSelectMode]);
+
   const actionMenuOptions: ActionMenuOption[] = actionMenuVideo
     ? [
         {
@@ -161,6 +192,12 @@ export default function FolderScreen() {
           label: 'Properties',
           icon: 'information-circle-outline',
           onPress: () => setPropertiesVideo(actionMenuVideo),
+        },
+        {
+          key: 'vault',
+          label: 'Move to Vault',
+          icon: 'lock-closed-outline',
+          onPress: () => setVaultVideo(actionMenuVideo),
         },
         {
           key: 'delete',
@@ -202,6 +239,7 @@ export default function FolderScreen() {
     () => videos.find((v) => selectedIds.has(v.id)) ?? null,
     [videos, selectedIds]
   );
+  const batchVaultFirstVideo = batchDeleteFirstVideo;
 
   return (
     <ThemedView style={styles.container}>
@@ -223,6 +261,16 @@ export default function FolderScreen() {
                     name={allSelected ? 'checkbox' : 'checkbox-outline'}
                     size={22}
                     color={accentColor}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => setBatchVaultVisible(true)}
+                  hitSlop={12}
+                  disabled={selectedIds.size === 0}>
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={22}
+                    color={selectedIds.size === 0 ? mutedColor : accentColor}
                   />
                 </Pressable>
                 <Pressable
@@ -334,6 +382,33 @@ export default function FolderScreen() {
         thumbnailUri={batchDeleteFirstVideo?.thumbnailUri}
         onCancel={() => setBatchDeleteVisible(false)}
         onConfirm={handleConfirmBatchDelete}
+      />
+
+      <DeleteConfirmSheet
+        visible={vaultVideo !== null}
+        title={vaultVideo?.filename ?? ''}
+        thumbnailUri={vaultVideo?.thumbnailUri}
+        tone="accent"
+        confirmLabel="Move to Vault"
+        warningText="This removes the file and its listing from your gallery and other apps. It stays on your device, only playable here, behind your Vault lock."
+        onCancel={() => setVaultVideo(null)}
+        onConfirm={handleConfirmVault}
+      />
+
+      <DeleteConfirmSheet
+        visible={batchVaultVisible}
+        title={`${selectedIds.size} video${selectedIds.size === 1 ? '' : 's'} selected`}
+        subtitle={
+          selectedIds.size > 1 && batchVaultFirstVideo
+            ? `${batchVaultFirstVideo.filename} and ${selectedIds.size - 1} more`
+            : (batchVaultFirstVideo?.filename ?? undefined)
+        }
+        thumbnailUri={batchVaultFirstVideo?.thumbnailUri}
+        tone="accent"
+        confirmLabel="Move to Vault"
+        warningText="These files are removed from your gallery and other apps. They stay on your device, only playable here, behind your Vault lock."
+        onCancel={() => setBatchVaultVisible(false)}
+        onConfirm={handleConfirmBatchVault}
       />
     </ThemedView>
   );

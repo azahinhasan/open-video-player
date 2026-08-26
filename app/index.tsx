@@ -122,6 +122,9 @@ export default function LibraryScreen() {
             {backgroundScanning ? (
               <ActivityIndicator size="small" color={accentColor} />
             ) : null}
+            <Pressable onPress={() => router.push("/vault")} hitSlop={12}>
+              <Ionicons name="lock-closed-outline" size={22} color={accentColor} />
+            </Pressable>
             <Pressable onPress={() => router.push("/search")} hitSlop={12}>
               <Ionicons name="search-outline" size={22} color={accentColor} />
             </Pressable>

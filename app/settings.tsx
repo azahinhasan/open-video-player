@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,6 +15,8 @@ import { useLibraryPreferences } from '@/hooks/useLibraryPreferences';
 import { usePlaybackPreferences } from '@/hooks/usePlaybackPreferences';
 import { useAccentColor, useThemePreference } from '@/hooks/useThemePreference';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useVaultAuthStore } from '@/hooks/useVaultAuthStore';
+import { PinSetupSheet } from '@/components/vault/PinSetupSheet';
 import { radius, spacing, typography } from '@/theme/tokens';
 import type { ControlsLayout, ResumeBehavior } from '@/utils/playbackPreferences';
 import type { ThemeMode } from '@/utils/themePreference';
@@ -102,6 +104,17 @@ export default function SettingsScreen() {
 
   const autoRefreshOnLaunch = useLibraryPreferences((s) => s.autoRefreshOnLaunch);
   const setAutoRefreshOnLaunch = useLibraryPreferences((s) => s.setAutoRefreshOnLaunch);
+
+  const hasVaultPin = useVaultAuthStore((s) => s.hasPin);
+  const vaultBiometricsAvailable = useVaultAuthStore((s) => s.biometricsAvailable);
+  const vaultBiometricsEnabled = useVaultAuthStore((s) => s.biometricsEnabled);
+  const setVaultBiometricsEnabled = useVaultAuthStore((s) => s.setBiometricsEnabled);
+  const vaultAuthInit = useVaultAuthStore((s) => s.init);
+  const [pinSheetVisible, setPinSheetVisible] = useState(false);
+
+  useEffect(() => {
+    vaultAuthInit();
+  }, [vaultAuthInit]);
 
   const isPreset = ACCENT_KEYS.some((key) => ACCENT_COLORS[key].toLowerCase() === accent.toLowerCase());
 
@@ -195,7 +208,44 @@ export default function SettingsScreen() {
           <Ionicons name="chevron-forward" size={18} color={mutedColor} />
         </Pressable>
       </Card>
+
+      <SectionHeader title="Vault security" />
+      <Card>
+        <View style={styles.row}>
+          <Ionicons
+            name="finger-print-outline"
+            size={20}
+            color={vaultBiometricsEnabled ? accentColor : mutedColor}
+          />
+          <ThemedText style={styles.rowLabel}>Unlock with biometrics</ThemedText>
+          <View style={styles.rowSpacer} />
+          <Switch
+            value={vaultBiometricsEnabled}
+            onValueChange={setVaultBiometricsEnabled}
+            disabled={!vaultBiometricsAvailable}
+            trackColor={{ false: 'rgba(128,128,128,0.3)', true: accentColor }}
+            thumbColor="#fff"
+          />
+        </View>
+        {hasVaultPin ? (
+          <>
+            <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
+            <Pressable style={styles.row} onPress={() => setPinSheetVisible(true)}>
+              <Ionicons name="keypad-outline" size={20} color={mutedColor} />
+              <ThemedText style={styles.rowLabel}>Change Vault PIN</ThemedText>
+              <View style={styles.rowSpacer} />
+              <Ionicons name="chevron-forward" size={18} color={mutedColor} />
+            </Pressable>
+          </>
+        ) : null}
+      </Card>
       </ScrollView>
+
+      <PinSetupSheet
+        visible={pinSheetVisible}
+        onCancel={() => setPinSheetVisible(false)}
+        onDone={() => setPinSheetVisible(false)}
+      />
 
       <CustomColorSheet
         visible={colorSheetVisible}

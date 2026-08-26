@@ -24,6 +24,7 @@ export default function RootLayout() {
             <Stack.Screen name="search" options={{ title: 'Search' }} />
             <Stack.Screen name="settings" options={{ title: 'Settings' }} />
             <Stack.Screen name="storage-cleanup" options={{ title: 'Storage & cleanup' }} />
+            <Stack.Screen name="vault" options={{ headerShown: false }} />
             <Stack.Screen
               name="player/[id]"
               options={{ headerShown: false, animation: 'fade' }}

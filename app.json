@@ -29,7 +29,12 @@
           "backgroundColor": "#0B0C0E"
         }
       ],
-      ["react-native-video", { "enableAndroidPictureInPicture": true }],
+      [
+        "react-native-video",
+        {
+          "enableAndroidPictureInPicture": true
+        }
+      ],
       "expo-notifications",
       [
         "expo-media-library",
@@ -37,9 +42,12 @@
           "photosPermission": "Allow $(PRODUCT_NAME) to access your videos.",
           "savePhotosPermission": "Allow $(PRODUCT_NAME) to save videos.",
           "isAccessMediaLocationEnabled": false,
-          "granularPermissions": ["video"]
+          "granularPermissions": [
+            "video"
+          ]
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

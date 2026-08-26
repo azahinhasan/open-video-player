@@ -100,9 +100,17 @@ type VideoLibraryStoreState = {
     patch: Partial<Pick<VideoAsset, 'duration' | 'thumbnailUri' | 'filename' | 'uri'>>
   ) => void;
   deleteVideos: (ids: string[]) => Promise<boolean>;
+  /**
+   * Removes videos from in-memory state (and the on-disk cache) without
+   * touching MediaLibrary — for callers (e.g. vaultStorage) that already
+   * performed the actual deletion themselves and just need this store to
+   * catch up. There's no MediaLibrary.addListener anywhere in this app, so
+   * this store only ever learns about MediaStore changes it's told about.
+   */
+  removeVideosFromState: (ids: string[]) => void;
 };
 
-const useVideoLibraryStore = create<VideoLibraryStoreState>((set, get) => ({
+export const useVideoLibraryStore = create<VideoLibraryStoreState>((set, get) => ({
   videos: [],
   folderNames: {},
   status: 'checking-permission',
@@ -208,14 +216,21 @@ const useVideoLibraryStore = create<VideoLibraryStoreState>((set, get) => ({
       if (!deleted) {
         return false;
       }
-      const idSet = new Set(ids);
-      const videos = get().videos.filter((v) => !idSet.has(v.id));
-      set({ videos });
-      writeMediaCache({ videos, folderNames: get().folderNames });
+      get().removeVideosFromState(ids);
       return true;
     } catch {
       return false;
     }
+  },
+
+  removeVideosFromState: (ids) => {
+    if (ids.length === 0) {
+      return;
+    }
+    const idSet = new Set(ids);
+    const videos = get().videos.filter((v) => !idSet.has(v.id));
+    set({ videos });
+    writeMediaCache({ videos, folderNames: get().folderNames });
   },
 }));
 

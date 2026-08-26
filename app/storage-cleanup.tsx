@@ -11,6 +11,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useAccentColor } from "@/hooks/useThemePreference";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { useVaultStore } from "@/hooks/useVaultStore";
 import { useVideoLibrary } from "@/hooks/useVideoLibrary";
 import { radius, spacing, typography } from "@/theme/tokens";
 import type { VideoAsset } from "@/types/video";
@@ -30,7 +31,8 @@ const TAB_OPTIONS: { value: CleanupTab; label: string }[] = [
 type SizedVideo = VideoAsset & { size: number | null };
 
 export default function StorageCleanupScreen() {
-  const { videos, deleteVideos } = useVideoLibrary();
+  const { videos, folders, deleteVideos } = useVideoLibrary();
+  const { vaultVideos } = useVaultStore();
   const accentColor = useAccentColor();
   const surfaceColor = useThemeColor({}, "surface");
   const borderColor = useThemeColor({}, "surfaceBorder");
@@ -41,6 +43,15 @@ export default function StorageCleanupScreen() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchDeleteVisible, setBatchDeleteVisible] = useState(false);
+  const [batchVaultVisible, setBatchVaultVisible] = useState(false);
+
+  const folderNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const folder of folders) {
+      map.set(folder.id, folder.name);
+    }
+    return map;
+  }, [folders]);
 
   const sized = useMemo<SizedVideo[]>(
     () => videos.map((video) => ({ ...video, size: getFileSize(video.uri) })),
@@ -124,10 +135,35 @@ export default function StorageCleanupScreen() {
     }
   };
 
+  const handleConfirmBatchVault = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) {
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setBatchVaultVisible(false);
+    const selectedVideos = rows.filter((v) => selectedIds.has(v.id));
+    const { failedCount } = await vaultVideos(
+      selectedVideos,
+      (v) => folderNameById.get(v.folderId) ?? "Videos",
+    );
+    exitSelectMode();
+    if (failedCount > 0) {
+      Alert.alert(
+        "Couldn't move all to Vault",
+        `${failedCount} video${failedCount === 1 ? "" : "s"} could not be moved.`,
+      );
+    }
+  };
+
   const batchDeleteFirstVideo = useMemo(
     () => rows.find((v) => selectedIds.has(v.id)) ?? null,
     [rows, selectedIds],
   );
+  // Vaulting moves bytes into the app's own sandbox rather than freeing
+  // device storage, so the totalSize stat above intentionally doesn't
+  // change when videos are vaulted from here.
+  const batchVaultFirstVideo = batchDeleteFirstVideo;
 
   return (
     <ThemedView style={styles.container}>
@@ -151,6 +187,17 @@ export default function StorageCleanupScreen() {
                       name={allSelected ? "checkbox" : "checkbox-outline"}
                       size={22}
                       color={accentColor}
+                    />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setBatchVaultVisible(true)}
+                    hitSlop={12}
+                    disabled={selectedIds.size === 0}
+                  >
+                    <Ionicons
+                      name="lock-closed-outline"
+                      size={22}
+                      color={selectedIds.size === 0 ? mutedColor : accentColor}
                     />
                   </Pressable>
                   <Pressable
@@ -265,6 +312,22 @@ export default function StorageCleanupScreen() {
         thumbnailUri={batchDeleteFirstVideo?.thumbnailUri}
         onCancel={() => setBatchDeleteVisible(false)}
         onConfirm={handleConfirmBatchDelete}
+      />
+
+      <DeleteConfirmSheet
+        visible={batchVaultVisible}
+        title={`${selectedIds.size} video${selectedIds.size === 1 ? "" : "s"} selected`}
+        subtitle={
+          selectedIds.size > 1 && batchVaultFirstVideo
+            ? `${batchVaultFirstVideo.filename} and ${selectedIds.size - 1} more`
+            : (batchVaultFirstVideo?.filename ?? undefined)
+        }
+        thumbnailUri={batchVaultFirstVideo?.thumbnailUri}
+        tone="accent"
+        confirmLabel="Move to Vault"
+        warningText="These files are removed from your gallery and other apps. They stay on your device, only playable here, behind your Vault lock."
+        onCancel={() => setBatchVaultVisible(false)}
+        onConfirm={handleConfirmBatchVault}
       />
     </ThemedView>
   );
