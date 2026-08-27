@@ -44,40 +44,32 @@ const LOCAL_FILE_BUFFER_CONFIG: BufferConfig = {
 // COVER/STRETCH, then snaps into the correct letterboxed CONTAIN shape") is
 // caused by ExoPlayer applying its resizeMode transform asynchronously,
 // slightly after onReadyForDisplay fires — with no JS-visible event for
-// "the transform has now been applied." Two timing-based approaches were
-// tried and both proved unreliable (a flat delay guessed from one device,
-// and watching the <Video> view's own onLayout — which never fires again
-// after mount, since that view is always full-bleed and its OWN bounds
-// never change; the transform happens INSIDE those fixed bounds).
+// "the transform has now been applied."
 //
-// Instead of covering the flash with a guessed delay, this removes the
-// cause: onLoad fires BEFORE onReadyForDisplay and already reports the
-// video's real naturalSize. That means the correctly-shaped letterboxed box
-// can be computed in JS the moment onLoad fires — before the first frame
-// even renders — and used to size an inner container exactly. The <Video>
-// inside that already-correctly-shaped box uses resizeMode COVER, which for
-// a box that already matches the video's aspect ratio is just an exact
-// 1:1 fill — there's no letterbox transform left for native to compute or
-// lag on, so there's nothing to snap into. This only applies when
-// zoomMode is "contain" (the mode that needs letterboxing at all); "cover"
-// and "stretch" already fill the full screen edge-to-edge by definition, so
-// there's no wrong-shape state to flash through for those.
+// The first attempt at fixing this computed the correctly-shaped
+// letterboxed box in JS from onLoad's naturalSize — but onLoad only fires
+// AFTER the <Video> component has already mounted at a fallback full-screen
+// size, so the container still resized once, after mount, before settling
+// on the real box. That resize-after-mount turned out to itself cause a
+// visible hiccup (confirmed by testing: hardcoding the final box size from
+// the very first render eliminated the flash completely; computing the same
+// final size one render later did not).
 //
-// Until onLoad has reported naturalSize (or for the "cover"/"stretch"
-// zoom modes), the cover overlay below stays up, same as before.
-
-// Safety net in case onReadyForDisplay never fires for this source (an
-// audio-only file has no video frame to report ready, and a genuinely
-// broken file may never reach STATE_READY at all) — without this, the
-// cover overlay (if any) and the caller's pictureReady gate would stay
-// stuck forever instead of just missing their sync-with-picture goal for
-// that one file.
+// The real fix is this: VideoAsset already stores width/height for every
+// video, captured once during the library scan — there's no need to
+// discover naturalSize from the player at all. initialNaturalSize below is
+// seeded from that already-known data, so containerStyle is correct on the
+// very first render, and the container never resizes after mount. onLoad's
+// naturalSize is still read as a fallback/correction for the rare case a
+// video's stored dimensions are missing or wrong (e.g. a library entry
+// scanned before width/height capture existed) — see handleLoad.
 const READY_FALLBACK_TIMEOUT_MS = 12000;
 
 // Small fixed buffer after onReadyForDisplay before revealing, for
-// "cover"/"stretch" zoom modes only (which skip the naturalSize-based
-// sizing above, since they don't need letterboxing) — kept short since it's
-// no longer doing the heavy lifting the old RESIZE_SETTLE_MS was.
+// "cover"/"stretch" zoom modes (which don't use the pre-sized box at all,
+// since they don't need letterboxing) and for the fallback case where no
+// initialNaturalSize was available and naturalSize is only just now arriving
+// from onLoad. Kept short since it's not doing the heavy lifting anymore.
 const NON_CONTAIN_REVEAL_DELAY_MS = 150;
 
 export type VideoZoomMode = "contain" | "cover" | "stretch";
@@ -91,6 +83,19 @@ type VideoPlayerProps = {
   rate?: number;
   loop?: boolean;
   zoomMode?: VideoZoomMode;
+  /**
+   * The video's real dimensions, already known from VideoAsset (captured
+   * during the library scan) — pass video.width/video.height here whenever
+   * available. Used to size the "contain" letterbox box correctly on the
+   * very first render, so the container never resizes after mount (see the
+   * top-of-file note for why that resize was itself the cause of the
+   * startup flash, not just a cosmetic detail). Pass null/undefined only
+   * when a video's dimensions genuinely aren't known yet (e.g. an older
+   * library entry scanned before width/height capture existed) — in that
+   * case this falls back to discovering size from onLoad instead, which
+   * reintroduces the original resize-after-mount gap for that video only.
+   */
+  initialNaturalSize?: NaturalSize | null;
   /**
    * Native track index (from OnLoadData/OnAudioTracksData.audioTracks) to
    * play — undefined/null lets the player use its own default rather than
@@ -153,6 +158,7 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
       rate = 1,
       loop = false,
       zoomMode = "contain",
+      initialNaturalSize = null,
       selectedAudioTrackIndex,
       posterUri,
       onPictureReady,
@@ -170,9 +176,16 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
   ) {
     const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
-    // Reported by onLoad, before the first frame renders. Only meaningful
-    // for "contain" — see the top-of-file note.
-    const [naturalSize, setNaturalSize] = useState<NaturalSize | null>(null);
+    // Seeded from the caller's already-known dimensions (see
+    // initialNaturalSize's doc comment) rather than always starting null —
+    // this is what makes containerStyle correct on the very first render.
+    // This component is always given a fresh `key` per video (see
+    // PlayerScreen), so a plain (non-lazy) useState initializer here is
+    // fine: a genuinely new component instance is created per video, each
+    // reading whatever initialNaturalSize it was mounted with.
+    const [naturalSize, setNaturalSize] = useState<NaturalSize | null>(
+      initialNaturalSize,
+    );
 
     const [coverVisible, setCoverVisible] = useState(true);
     // Muted from mount until the cover hides (or the fallback below gives
@@ -204,10 +217,13 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
     // Mount-only: this component is always given a fresh `key` (see
     // PlayerScreen) for a new video/source, so there's no case where `uri`
     // changes under an already-mounted instance that would need this to
-    // re-run.
+    // re-run. Deliberately does NOT reset naturalSize here — the useState
+    // initializer above already seeds it correctly for this specific mount;
+    // resetting it to null here would immediately undo that seeding right
+    // after the first paint, reintroducing the exact resize-after-mount gap
+    // this whole approach exists to avoid.
     useEffect(() => {
       readyForDisplayFiredRef.current = false;
-      setNaturalSize(null);
       setCoverVisible(true);
       setAudioMuted(true);
       fallbackTimerRef.current = setTimeout(
@@ -227,25 +243,28 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
 
     const handleLoad = useCallback(
       (data: OnLoadData) => {
+        // Only used as a fallback/correction now — the common case already
+        // has the correct size from initialNaturalSize before this ever
+        // fires. Still applied when it disagrees with what we were seeded
+        // with (e.g. a stored width/height that's stale or wrong) or when
+        // no initialNaturalSize was available at all.
         const size = data.naturalSize;
         if (size && size.width && size.height) {
-          // Some devices/files report naturalSize pre-rotation (i.e. still
-          // in the sensor's landscape orientation even for a portrait-shot
-          // clip tagged with 90/270 rotation metadata) — orientation is
-          // reported alongside it specifically to correct for that. If a
-          // library/OS version is ever seen where this over-corrects (i.e.
-          // width/height already come pre-rotated), this swap is the first
-          // place to check.
           const rotated =
             data.naturalSize?.orientation === "portrait"
               ? size.width > size.height
               : data.naturalSize?.orientation === "landscape"
                 ? size.height > size.width
                 : false;
-          setNaturalSize(
-            rotated
-              ? { width: size.height, height: size.width }
-              : { width: size.width, height: size.height },
+          const resolved = rotated
+            ? { width: size.height, height: size.width }
+            : { width: size.width, height: size.height };
+          setNaturalSize((prev) =>
+            prev &&
+            prev.width === resolved.width &&
+            prev.height === resolved.height
+              ? prev
+              : resolved,
           );
         }
         onLoad?.(data);
@@ -258,13 +277,14 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
         return;
       }
       readyForDisplayFiredRef.current = true;
-      // For "contain" with naturalSize already known, the container is
-      // already sized to the exact correct aspect ratio (see containerStyle
-      // below) — resizeMode COVER on an already-correctly-shaped box is an
-      // exact fill, nothing left to transform, so it's safe to reveal on
-      // the very next frame. Every other case (naturalSize not yet known,
-      // or "cover"/"stretch" zoom modes, which don't use the computed box
-      // at all) falls back to a short fixed buffer, same as before.
+      // For "contain" with naturalSize already known (the common case now,
+      // via initialNaturalSize), the container is already sized to the
+      // exact correct aspect ratio from the very first render — resizeMode
+      // COVER on an already-correctly-shaped box is an exact fill, nothing
+      // left to transform, so it's safe to reveal on the very next frame.
+      // Every other case (no initialNaturalSize and onLoad hasn't reported
+      // one yet, or "cover"/"stretch" zoom modes) falls back to a short
+      // fixed buffer, same as before.
       const isPreSizedContain = zoomMode === "contain" && naturalSize !== null;
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -281,11 +301,9 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
     }, [markPictureReady, zoomMode, naturalSize]);
 
     // The letterboxed box for "contain": computed from the real video
-    // dimensions against the actual screen size, so the <Video> component
-    // can be mounted already at its final correct shape instead of full
-    // screen and later corrected by native. Falls back to full-screen sizing
-    // (the old behavior) until naturalSize is known, or for zoom modes that
-    // don't need this at all.
+    // dimensions against the actual screen size. When naturalSize is
+    // already known on the first render (the common case now), this is
+    // correct immediately and the container never resizes after mount.
     const containerStyle = useMemo(() => {
       if (
         zoomMode !== "contain" ||

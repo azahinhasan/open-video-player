@@ -688,6 +688,17 @@ export function PlayerScreen({
             rate={rate}
             loop={loop}
             zoomMode={zoomMode}
+            // Already known from the library scan — lets VideoPlayer size
+            // its "contain" letterbox box correctly from the very first
+            // render instead of waiting on the player's own onLoad (see
+            // VideoPlayer's top-of-file note on why that gap matters). 0
+            // means genuinely unknown (an older library entry scanned
+            // before width/height capture existed), not a real dimension.
+            initialNaturalSize={
+              video.width && video.height
+                ? { width: video.width, height: video.height }
+                : null
+            }
             // Only on the true first mount for this video — a reloadToken
             // bump (audio-track switch, error recovery) is a brief reinit
             // mid-playback, where flashing a static thumbnail would read as
