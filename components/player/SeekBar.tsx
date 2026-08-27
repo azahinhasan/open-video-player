@@ -46,7 +46,12 @@ export function SeekBar({
   const accentColor = useAccentColor();
 
   const railWidth = useSharedValue(0);
-  const progressFraction = useSharedValue(0);
+  // Seeded from the initial props (not 0) — currentTime/duration already
+  // reflect the resumed position on first render (see PlayerScreen's
+  // resolveResumeSeconds), so this needs to match from the start too,
+  // rather than rendering an empty bar for one frame before the effect
+  // below corrects it.
+  const progressFraction = useSharedValue(duration > 0 ? currentTime / duration : 0);
   const dragFraction = useSharedValue(0);
   const isDragging = useSharedValue(false);
 
@@ -128,18 +133,55 @@ export function SeekBar({
           const width = railWidth.value || 1;
           dragFraction.value = Math.min(1, Math.max(0, event.x / width));
         })
-        .onEnd(() => {
-          isDragging.value = false;
-          // Whether this was a quick tap or a drag, seek to exactly where the
-          // finger ended up — dragFraction already reflects that position,
-          // since onBegin seeds it immediately even for a zero-movement tap.
+        .onEnd((_event, success) => {
+          // Only a genuine drag reaches here successfully — a tap with truly
+          // zero movement between touch-down and lift-off never gets a
+          // touches-moved event to activate on, so minDistance(0) alone
+          // doesn't reliably catch it (most visible on emulators/precise
+          // taps, which don't add the finger jitter a real touch usually
+          // does). tapGesture below is the dedicated fallback for that case.
+          if (!success) {
+            return;
+          }
           runOnJS(commitSeek)(dragFraction.value);
+        })
+        .onFinalize(() => {
+          // Runs regardless of whether the gesture ended, failed, or was
+          // cancelled (e.g. tapGesture won the race) — the alternative,
+          // doing this only in onEnd, left isDragging stuck true forever
+          // whenever Pan never activated.
+          isDragging.value = false;
           if (onScrubEnd) {
             runOnJS(onScrubEnd)();
           }
         }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [commitSeek, onScrubStart, onScrubEnd]
+  );
+
+  const tapGesture = useMemo(
+    () =>
+      Gesture.Tap()
+        .maxDuration(250)
+        .onEnd((event, success) => {
+          if (!success) {
+            return;
+          }
+          const width = railWidth.value || 1;
+          runOnJS(commitSeek)(Math.min(1, Math.max(0, event.x / width)));
+        }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [commitSeek]
+  );
+
+  // Race, not Simultaneous: panGesture usually wins (minDistance(0) lets it
+  // activate on the first touches-moved event, which most real taps still
+  // produce via finger jitter) and drives the live drag preview via
+  // onUpdate. tapGesture only wins — and only then calls commitSeek — for
+  // the zero-movement taps panGesture's onEnd never gets called for.
+  const seekGesture = useMemo(
+    () => Gesture.Race(panGesture, tapGesture),
+    [panGesture, tapGesture]
   );
 
   const previewStyle = useAnimatedStyle(() => ({
@@ -158,7 +200,7 @@ export function SeekBar({
 
   return (
     <View style={styles.wrapper}>
-      <GestureDetector gesture={panGesture}>
+      <GestureDetector gesture={seekGesture}>
         <View
           style={styles.touchArea}
           onLayout={(event) => {

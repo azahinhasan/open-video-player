@@ -54,6 +54,21 @@ const PIP_SUPPORTED = Platform.OS === 'android' && Platform.Version >= 26;
 const SUBTITLE_BASE_GAP = 20;
 const SUBTITLE_CONTROLS_GAP = 8;
 
+// Resolves the position playback should start/display at, synchronously —
+// used to seed currentTime's initial state (and the VideoPlayer's
+// startPositionSeconds prop) so the very first render already shows the
+// resumed position instead of 0:00, which would otherwise flash briefly
+// before the real value arrives from the native onProgress callback.
+function resolveResumeSeconds(video: VideoAsset | null): number {
+  if (!video) {
+    return 0;
+  }
+  if (usePlaybackPreferences.getState().resumeBehavior === 'restart') {
+    return 0;
+  }
+  return usePlaybackStore.getState().positionFor(video.id);
+}
+
 type PlayerScreenProps = {
   /**
    * Route prefix used for next/prev navigation and autoplay-next
@@ -71,22 +86,39 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
   const router = useRouter();
   const queue = usePlaybackStore((s) => s.queue);
   const paused = usePlaybackStore((s) => s.paused);
-  const play = usePlaybackStore((s) => s.play);
   const togglePlayPause = usePlaybackStore((s) => s.togglePlayPause);
   const savePosition = usePlaybackStore((s) => s.savePosition);
-  const positionFor = usePlaybackStore((s) => s.positionFor);
 
   const video = queue.find((v) => v.id === id) ?? null;
   const videoRef = useRef<VideoRef>(null);
   const accentColor = useAccentColor();
   const insets = useSafeAreaInsets();
-  const resumeBehavior = usePlaybackPreferences((s) => s.resumeBehavior);
   const controlsLayout = usePlaybackPreferences((s) => s.controlsLayout);
   const bottomControlsTouchHeight =
     controlsLayout === 'bottom' ? BOTTOM_CONTROLS_TOUCH_HEIGHT_WITH_TRANSPORT : BOTTOM_CONTROLS_TOUCH_HEIGHT_CENTER;
 
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(() => video?.duration ?? 0);
+  const [currentTime, setCurrentTime] = useState(() => resolveResumeSeconds(video));
+  // False from the moment a video is opened until VideoPlayer's picture is
+  // actually visually accurate (see handlePictureReady) — audio/playback
+  // itself isn't gated on this (see VideoPlayer's POSTER_HIDE_DELAY_MS
+  // comment for why that turned out not to work), so this only gates
+  // displayTime below, keeping the timer/seek bar from visibly ticking
+  // ahead of a still-black or still-poster-covered picture; internal logic
+  // (seeking, saving position) keeps using the real currentTime state,
+  // which updates immediately regardless.
+  const [pictureReady, setPictureReady] = useState(false);
+  // Resets pictureReady synchronously during render (not in an effect) the
+  // instant `id` changes, so a new video never briefly renders with the
+  // previous video's already-true pictureReady before its own reset effect
+  // gets a chance to run.
+  const pictureReadyVideoIdRef = useRef<string | null>(null);
+  if (pictureReadyVideoIdRef.current !== id) {
+    pictureReadyVideoIdRef.current = id ?? null;
+    if (pictureReady) {
+      setPictureReady(false);
+    }
+  }
   const [buffering, setBuffering] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -255,8 +287,13 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
   }, []);
 
   useEffect(() => {
-    setDuration(0);
-    setCurrentTime(0);
+    const currentVideo = queue.find((v) => v.id === id) ?? null;
+    // Seeded from known data (video metadata + saved position), not 0 — a
+    // brand-new mount already does this via useState's lazy initializer,
+    // but next/prev navigation reuses this same mounted screen, so this
+    // effect needs to seed it the same way to avoid the same 0:00 flash.
+    setDuration(currentVideo?.duration ?? 0);
+    setCurrentTime(resolveResumeSeconds(currentVideo));
     setBuffering(false);
     setErrorMessage(null);
     setLocked(false);
@@ -267,14 +304,25 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
     setSubtitleCues([]);
     setAudioTracks([]);
     setSelectedAudioTrackIndex(null);
+    // reloadToken doesn't semantically belong to a specific video — it only
+    // exists to force a fresh native player instance (audio-track switch,
+    // decoder error recovery) — but posterUri below keys off it being 0 to
+    // decide whether this is a genuine first-mount-for-this-video. Left
+    // stale from a previous video's reload, it would permanently disable
+    // the poster (and the native seek/resize settling it masks) for every
+    // video opened afterward.
+    setReloadToken(0);
 
-    const currentVideo = queue.find((v) => v.id === id);
     if (currentVideo) {
       loadSubtitlesFor(currentVideo);
     }
 
     usePlaybackStore.getState().markViewed(id);
-    play();
+    // Opens paused rather than autoplaying — the user taps play to start.
+    // setQueue (run just before navigating here, from the folder/vault/
+    // search screens) leaves paused false, so this needs to explicitly
+    // override it rather than relying on that default.
+    usePlaybackStore.getState().pause();
     showControls();
     return clearHideTimer;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -339,6 +387,10 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
 
   const handleBuffer = useCallback((data: OnBufferData) => {
     setBuffering(data.isBuffering);
+  }, []);
+
+  const handlePictureReady = useCallback(() => {
+    setPictureReady(true);
   }, []);
 
   const handleError = useCallback(
@@ -518,6 +570,12 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
   const displayedAudioTrackIndex =
     selectedAudioTrackIndex ?? audioTracks.find((track) => track.selected)?.index ?? null;
 
+  // Frozen at the resumed start position until the picture itself is ready
+  // to show — see pictureReady above. Only feeds UI display (seek bar,
+  // timer text, subtitles, gesture-layer seek preview); seeking/saving keep
+  // reading the real, immediately-updating currentTime state.
+  const displayTime = pictureReady ? currentTime : resolveResumeSeconds(video);
+
   return (
     <View style={styles.container}>
       <StatusBar hidden={!controlsVisible} animated />
@@ -535,7 +593,7 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
             ref={videoRef}
             uri={video.uri}
             paused={paused}
-            startPositionSeconds={resumeBehavior === 'restart' ? 0 : positionFor(video.id)}
+            startPositionSeconds={resolveResumeSeconds(video)}
             rate={rate}
             loop={loop}
             zoomMode={zoomMode}
@@ -557,6 +615,7 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
             onEnd={handleEnd}
             onError={handleError}
             onAudioTracks={handleAudioTracksChanged}
+            onPictureReady={handlePictureReady}
             onPictureInPictureStatusChanged={handlePipStatusChanged}
             onRestoreUserInterfaceForPictureInPictureStop={handleRestoreFromPip}
           />
@@ -564,7 +623,7 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
           {pipActive ? null : (
             <SubtitleOverlay
               cues={subtitleCues}
-              currentTime={currentTime}
+              currentTime={displayTime}
               visible={subtitlesEnabled}
               bottomOffset={subtitleBottomOffset}
             />
@@ -577,7 +636,7 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
           ) : (
             <>
               <GestureLayer
-                currentTime={currentTime}
+                currentTime={displayTime}
                 duration={duration}
                 volumeLevel={volumeLevel}
                 onSeekBy={(delta) => {
@@ -596,7 +655,7 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
                 visible={controlsVisible}
                 title={video.filename}
                 paused={paused}
-                currentTime={currentTime}
+                currentTime={displayTime}
                 duration={duration}
                 buffering={buffering}
                 hasNext={hasNext}
