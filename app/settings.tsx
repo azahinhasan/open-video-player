@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AccentSwatch } from '@/components/settings/AccentSwatch';
+import { CollapsibleSection } from '@/components/settings/CollapsibleSection';
 import { CustomColorSheet } from '@/components/settings/CustomColorSheet';
 import { SegmentedControl } from '@/components/settings/SegmentedControl';
 import { ThemedText } from '@/components/themed-text';
@@ -20,8 +20,8 @@ import { useVaultAuthStore } from '@/hooks/useVaultAuthStore';
 import { PinGatedSwitch } from '@/components/settings/PinGatedSwitch';
 import { PinSetupSheet } from '@/components/vault/PinSetupSheet';
 import { VerifyPinSheet } from '@/components/vault/VerifyPinSheet';
-import { radius, spacing, typography } from '@/theme/tokens';
-import type { ControlsLayout, ResumeBehavior } from '@/utils/playbackPreferences';
+import { spacing, typography } from '@/theme/tokens';
+import type { ControlsLayout, DefaultOrientation, ResumeBehavior } from '@/utils/playbackPreferences';
 import type { SubtitleBackgroundOpacity, SubtitleFontSize } from '@/utils/subtitleStylePreferences';
 import type { ThemeMode } from '@/utils/themePreference';
 
@@ -33,6 +33,11 @@ const RESUME_OPTIONS: { value: ResumeBehavior; label: string }[] = [
 const CONTROLS_LAYOUT_OPTIONS: { value: ControlsLayout; label: string }[] = [
   { value: 'center', label: 'Center' },
   { value: 'bottom', label: 'Below bar' },
+];
+
+const DEFAULT_ORIENTATION_OPTIONS: { value: DefaultOrientation; label: string }[] = [
+  { value: 'portrait', label: 'Portrait' },
+  { value: 'landscape', label: 'Landscape' },
 ];
 
 const MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
@@ -55,22 +60,6 @@ const SUBTITLE_BACKGROUND_OPACITY_OPTIONS: { value: SubtitleBackgroundOpacity; l
 ];
 
 const ACCENT_KEYS = Object.keys(ACCENT_COLORS) as AccentColorKey[];
-
-function SectionHeader({ title }: { title: string }) {
-  const borderColor = useThemeColor({}, 'surfaceBorder');
-  return (
-    <View style={styles.sectionHeader}>
-      <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
-      <View style={[styles.sectionDivider, { backgroundColor: borderColor }]} />
-    </View>
-  );
-}
-
-function Card({ children }: { children: ReactNode }) {
-  const surfaceColor = useThemeColor({}, 'surface');
-  const borderColor = useThemeColor({}, 'surfaceBorder');
-  return <View style={[styles.card, { backgroundColor: surfaceColor, borderColor }]}>{children}</View>;
-}
 
 function CustomAccentButton({
   color,
@@ -118,6 +107,8 @@ export default function SettingsScreen() {
   const setAutoPlayNext = usePlaybackPreferences((s) => s.setAutoPlayNext);
   const controlsLayout = usePlaybackPreferences((s) => s.controlsLayout);
   const setControlsLayout = usePlaybackPreferences((s) => s.setControlsLayout);
+  const defaultOrientation = usePlaybackPreferences((s) => s.defaultOrientation);
+  const setDefaultOrientation = usePlaybackPreferences((s) => s.setDefaultOrientation);
 
   const autoRefreshOnLaunch = useLibraryPreferences((s) => s.autoRefreshOnLaunch);
   const setAutoRefreshOnLaunch = useLibraryPreferences((s) => s.setAutoRefreshOnLaunch);
@@ -172,8 +163,7 @@ export default function SettingsScreen() {
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + spacing.xl }]}
         showsVerticalScrollIndicator={false}>
-      <SectionHeader title="Library" />
-      <Card>
+      <CollapsibleSection title="Library">
         <View style={styles.row}>
           <Ionicons name="refresh-outline" size={20} color={autoRefreshOnLaunch ? accentColor : mutedColor} />
           <ThemedText style={styles.rowLabel}>Auto-refresh on launch</ThemedText>
@@ -185,10 +175,9 @@ export default function SettingsScreen() {
             thumbColor="#fff"
           />
         </View>
-      </Card>
+      </CollapsibleSection>
 
-      <SectionHeader title="Playback" />
-      <Card>
+      <CollapsibleSection title="Playback">
         <View style={styles.controlBlock}>
           <ThemedText style={styles.controlLabel}>When reopening a video</ThemedText>
           <SegmentedControl options={RESUME_OPTIONS} value={resumeBehavior} onChange={setResumeBehavior} />
@@ -218,10 +207,20 @@ export default function SettingsScreen() {
             onChange={setControlsLayout}
           />
         </View>
-      </Card>
 
-      <SectionHeader title="Subtitles" />
-      <Card>
+        <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
+
+        <View style={styles.controlBlock}>
+          <ThemedText style={styles.controlLabel}>Default orientation</ThemedText>
+          <SegmentedControl
+            options={DEFAULT_ORIENTATION_OPTIONS}
+            value={defaultOrientation}
+            onChange={setDefaultOrientation}
+          />
+        </View>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Subtitles">
         <View style={styles.controlBlock}>
           <ThemedText style={styles.controlLabel}>Text size</ThemedText>
           <SegmentedControl
@@ -273,18 +272,16 @@ export default function SettingsScreen() {
             onChange={setSubtitleBackgroundOpacity}
           />
         </View>
-      </Card>
+      </CollapsibleSection>
 
-      <SectionHeader title="Appearance" />
-      <Card>
+      <CollapsibleSection title="Appearance">
         <View style={styles.controlBlock}>
           <ThemedText style={styles.controlLabel}>Theme</ThemedText>
           <SegmentedControl options={MODE_OPTIONS} value={mode} onChange={setMode} />
         </View>
-      </Card>
+      </CollapsibleSection>
 
-      <SectionHeader title="Accent color" />
-      <Card>
+      <CollapsibleSection title="Accent color">
         <View style={styles.swatchRow}>
           {ACCENT_KEYS.map((key) => (
             <AccentSwatch
@@ -301,20 +298,18 @@ export default function SettingsScreen() {
             onPress={() => setColorSheetVisible(true)}
           />
         </View>
-      </Card>
+      </CollapsibleSection>
 
-      <SectionHeader title="Storage" />
-      <Card>
+      <CollapsibleSection title="Storage">
         <Pressable style={styles.row} onPress={() => router.push('/storage-cleanup')}>
           <Ionicons name="server-outline" size={20} color={mutedColor} />
           <ThemedText style={styles.rowLabel}>Storage & cleanup</ThemedText>
           <View style={styles.rowSpacer} />
           <Ionicons name="chevron-forward" size={18} color={mutedColor} />
         </Pressable>
-      </Card>
+      </CollapsibleSection>
 
-      <SectionHeader title="Vault security" />
-      <Card>
+      <CollapsibleSection title="Vault security">
         <View style={styles.row}>
           <Ionicons
             name="finger-print-outline"
@@ -346,7 +341,7 @@ export default function SettingsScreen() {
             </Pressable>
           </>
         ) : null}
-      </Card>
+      </CollapsibleSection>
       </ScrollView>
 
       <PinSetupSheet
@@ -394,28 +389,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: spacing.lg,
-  },
-  sectionHeader: {
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  sectionTitle: {
-    fontSize: typography.size.meta,
-    fontWeight: typography.weight.medium,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    opacity: 0.6,
-    marginBottom: spacing.sm,
-  },
-  sectionDivider: {
-    height: StyleSheet.hairlineWidth,
-  },
-  card: {
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.xl,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
   },
   controlBlock: {
     paddingHorizontal: spacing.lg,

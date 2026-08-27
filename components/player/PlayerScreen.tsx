@@ -84,6 +84,17 @@ function resolveResumeSeconds(video: VideoAsset | null): number {
   return usePlaybackStore.getState().positionFor(video.id);
 }
 
+// Orientation the player screen locks into as soon as it mounts, driven by
+// the user's "Default orientation" setting — read synchronously (not via a
+// hook + effect) so the very first lockAsync call already targets the
+// right orientation instead of starting portrait and flipping a moment
+// later for users who set landscape as their default.
+function resolveDefaultOrientationLock(): ScreenOrientation.OrientationLock {
+  return usePlaybackPreferences.getState().defaultOrientation === "landscape"
+    ? ScreenOrientation.OrientationLock.LANDSCAPE
+    : ScreenOrientation.OrientationLock.PORTRAIT_UP;
+}
+
 type PlayerScreenProps = {
   /**
    * Route prefix used for next/prev navigation and autoplay-next
@@ -145,7 +156,7 @@ export function PlayerScreen({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [orientationLock, setOrientationLock] = useState(
-    ScreenOrientation.OrientationLock.PORTRAIT_UP,
+    resolveDefaultOrientationLock,
   );
   const [locked, setLocked] = useState(false);
   const [rate, setRate] = useState(1);

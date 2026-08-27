@@ -1,5 +1,12 @@
-import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
-import { Image, StyleSheet } from "react-native";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Image, StyleSheet, View, useWindowDimensions } from "react-native";
 import Video, {
   BufferConfig,
   OnAudioTracksData,
@@ -31,39 +38,51 @@ const LOCAL_FILE_BUFFER_CONFIG: BufferConfig = {
   bufferForPlaybackAfterRebufferMs: 500,
 };
 
-// react-native-video's own onReadyForDisplay-driven poster hide fires as
-// soon as ExoPlayer reaches STATE_READY — well before the native PlayerView
-// actually resizes itself to the decoded frame's real aspect ratio (measured
-// via frame-by-frame screen recording at ~4s on this device/build — driven
-// by ExoPlayerView.kt's Player.EVENT_VIDEO_SIZE_CHANGED listener, not
-// anything exposed to JS, so there's no earlier reliable signal to hook).
-// Revealing before that resize completes flashes a wrong-shaped ("thin
-// band") video for the remaining gap. Holding our own overlay past it masks
-// the settling instead. This is also the earliest point the picture is
-// actually, visually accurate — see onPictureReady, which fires here too.
+// --- Why this file no longer asks native to letterbox the video ---
 //
-// Tried gating actual playback (via `paused`) on this same signal so audio
-// couldn't start before it, on the theory that the surface-attach delay
-// above was itself gated on STATE_READY. It isn't — that attach only
-// starts once playback actually begins, so holding `paused` just delayed
-// the same gap instead of overlapping it, making the total wait longer.
-// Reverted; audio starting ahead of the picture is masked (not eliminated)
-// by the poster below instead.
-const POSTER_HIDE_DELAY_MS = 0;
+// The flash previously seen ("video briefly fills edge-to-edge like
+// COVER/STRETCH, then snaps into the correct letterboxed CONTAIN shape") is
+// caused by ExoPlayer applying its resizeMode transform asynchronously,
+// slightly after onReadyForDisplay fires — with no JS-visible event for
+// "the transform has now been applied." Two timing-based approaches were
+// tried and both proved unreliable (a flat delay guessed from one device,
+// and watching the <Video> view's own onLayout — which never fires again
+// after mount, since that view is always full-bleed and its OWN bounds
+// never change; the transform happens INSIDE those fixed bounds).
+//
+// Instead of covering the flash with a guessed delay, this removes the
+// cause: onLoad fires BEFORE onReadyForDisplay and already reports the
+// video's real naturalSize. That means the correctly-shaped letterboxed box
+// can be computed in JS the moment onLoad fires — before the first frame
+// even renders — and used to size an inner container exactly. The <Video>
+// inside that already-correctly-shaped box uses resizeMode COVER, which for
+// a box that already matches the video's aspect ratio is just an exact
+// 1:1 fill — there's no letterbox transform left for native to compute or
+// lag on, so there's nothing to snap into. This only applies when
+// zoomMode is "contain" (the mode that needs letterboxing at all); "cover"
+// and "stretch" already fill the full screen edge-to-edge by definition, so
+// there's no wrong-shape state to flash through for those.
+//
+// Until onLoad has reported naturalSize (or for the "cover"/"stretch"
+// zoom modes), the cover overlay below stays up, same as before.
 
 // Safety net in case onReadyForDisplay never fires for this source (an
 // audio-only file has no video frame to report ready, and a genuinely
 // broken file may never reach STATE_READY at all) — without this, the
-// poster (if any) and the caller's pictureReady gate would stay stuck
-// forever instead of just missing their sync-with-picture goal for that
-// one file. Deliberately well past POSTER_HIDE_DELAY_MS plus a generous
-// allowance for onReadyForDisplay itself being slow on an underpowered
-// device: this only exists to recover a genuinely-stuck load, not to race
-// a merely-slow one, which would hide the poster before the real picture
-// has actually settled.
+// cover overlay (if any) and the caller's pictureReady gate would stay
+// stuck forever instead of just missing their sync-with-picture goal for
+// that one file.
 const READY_FALLBACK_TIMEOUT_MS = 12000;
 
+// Small fixed buffer after onReadyForDisplay before revealing, for
+// "cover"/"stretch" zoom modes only (which skip the naturalSize-based
+// sizing above, since they don't need letterboxing) — kept short since it's
+// no longer doing the heavy lifting the old RESIZE_SETTLE_MS was.
+const NON_CONTAIN_REVEAL_DELAY_MS = 150;
+
 export type VideoZoomMode = "contain" | "cover" | "stretch";
+
+type NaturalSize = { width: number; height: number };
 
 type VideoPlayerProps = {
   uri: string;
@@ -82,20 +101,23 @@ type VideoPlayerProps = {
    */
   selectedAudioTrackIndex?: number | null;
   /**
-   * Shown immediately in place of the video and hidden a short beat after
-   * playback becomes ready — masks ExoPlayer's cold-start/seek latency (and
-   * the video surface's own aspect-ratio settling, see
-   * POSTER_HIDE_DELAY_MS) behind already-visible content instead of a black
-   * screen or a jarring frame-0-then-jump, so resuming mid-video feels
-   * instant.
+   * Shown immediately in place of the video and hidden once it's safe to
+   * reveal (see the top-of-file note on how "safe" is determined per zoom
+   * mode) — masks ExoPlayer's cold-start/seek latency behind already-visible
+   * content instead of a black screen or a jarring frame-0-then-jump, so
+   * resuming mid-video feels instant. When null (e.g. a reloadToken remount
+   * mid-playback — see PlayerScreen), a plain black cover is used instead of
+   * a thumbnail — a static thumbnail flash would read as a stutter there,
+   * but leaving the resize flash completely uncovered on that path was a
+   * gap, not a deliberate choice.
    */
   posterUri?: string | null;
   /**
-   * Fires once the picture is actually visually accurate — the same
-   * onReadyForDisplay-plus-settling-delay signal that hides the poster
-   * above (or READY_FALLBACK_TIMEOUT_MS, if that signal never comes). Lets
-   * the caller hold UI that would otherwise visibly race ahead of the
-   * picture (the elapsed-time counter, the seek bar) frozen until then.
+   * Fires once the picture is actually visually accurate — the same signal
+   * that hides the cover overlay above (or READY_FALLBACK_TIMEOUT_MS, if
+   * that signal never comes). Lets the caller hold UI that would otherwise
+   * visibly race ahead of the picture (the elapsed-time counter, the seek
+   * bar) frozen until then.
    */
   onPictureReady?: () => void;
   /** Auto-enters Picture-in-Picture when the user backgrounds the app while playing. */
@@ -146,26 +168,35 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
     },
     ref,
   ) {
-    const [posterVisible, setPosterVisible] = useState(!!posterUri);
-    // Muted from mount until the same moment the poster hides (or the
-    // fallback below gives up waiting) — decoding/rendering proceed on
-    // their own natural schedule either way (muting doesn't touch that, is
-    // unlike holding `paused` — see POSTER_HIDE_DELAY_MS's comment above),
-    // so audio simply stays silent until the real picture is ready to be
-    // heard alongside, instead of playing over the still-showing poster.
-    const [audioMuted, setAudioMuted] = useState(true);
-    const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
-    useEffect(() => {
-      setPosterVisible(!!posterUri);
-    }, [posterUri]);
+    // Reported by onLoad, before the first frame renders. Only meaningful
+    // for "contain" — see the top-of-file note.
+    const [naturalSize, setNaturalSize] = useState<NaturalSize | null>(null);
+
+    const [coverVisible, setCoverVisible] = useState(true);
+    // Muted from mount until the cover hides (or the fallback below gives
+    // up waiting) — decoding/rendering proceed on their own natural
+    // schedule either way (muting doesn't touch that, unlike holding
+    // `paused` would — that was tried and reverted, since it delayed the
+    // surface-attach itself rather than overlapping with it). Audio simply
+    // stays silent until the real picture is ready to be heard alongside,
+    // instead of playing over the still-showing cover.
+    const [audioMuted, setAudioMuted] = useState(true);
+    const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const readyForDisplayFiredRef = useRef(false);
 
     const markPictureReady = useCallback(() => {
       if (fallbackTimerRef.current) {
         clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
       }
-      setPosterVisible(false);
+      if (revealTimerRef.current) {
+        clearTimeout(revealTimerRef.current);
+        revealTimerRef.current = null;
+      }
+      setCoverVisible(false);
       setAudioMuted(false);
       onPictureReady?.();
     }, [onPictureReady]);
@@ -175,6 +206,10 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
     // changes under an already-mounted instance that would need this to
     // re-run.
     useEffect(() => {
+      readyForDisplayFiredRef.current = false;
+      setNaturalSize(null);
+      setCoverVisible(true);
+      setAudioMuted(true);
       fallbackTimerRef.current = setTimeout(
         markPictureReady,
         READY_FALLBACK_TIMEOUT_MS,
@@ -183,88 +218,197 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
         if (fallbackTimerRef.current) {
           clearTimeout(fallbackTimerRef.current);
         }
-        if (hideTimerRef.current) {
-          clearTimeout(hideTimerRef.current);
+        if (revealTimerRef.current) {
+          clearTimeout(revealTimerRef.current);
         }
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const handleLoad = useCallback(
+      (data: OnLoadData) => {
+        const size = data.naturalSize;
+        if (size && size.width && size.height) {
+          // Some devices/files report naturalSize pre-rotation (i.e. still
+          // in the sensor's landscape orientation even for a portrait-shot
+          // clip tagged with 90/270 rotation metadata) — orientation is
+          // reported alongside it specifically to correct for that. If a
+          // library/OS version is ever seen where this over-corrects (i.e.
+          // width/height already come pre-rotated), this swap is the first
+          // place to check.
+          const rotated =
+            data.naturalSize?.orientation === "portrait"
+              ? size.width > size.height
+              : data.naturalSize?.orientation === "landscape"
+                ? size.height > size.width
+                : false;
+          setNaturalSize(
+            rotated
+              ? { width: size.height, height: size.width }
+              : { width: size.width, height: size.height },
+          );
+        }
+        onLoad?.(data);
+      },
+      [onLoad],
+    );
+
     const handleReadyForDisplay = useCallback(() => {
-      if (hideTimerRef.current) {
-        clearTimeout(hideTimerRef.current);
+      if (readyForDisplayFiredRef.current) {
+        return;
       }
-      hideTimerRef.current = setTimeout(markPictureReady, POSTER_HIDE_DELAY_MS);
-    }, [markPictureReady]);
+      readyForDisplayFiredRef.current = true;
+      // For "contain" with naturalSize already known, the container is
+      // already sized to the exact correct aspect ratio (see containerStyle
+      // below) — resizeMode COVER on an already-correctly-shaped box is an
+      // exact fill, nothing left to transform, so it's safe to reveal on
+      // the very next frame. Every other case (naturalSize not yet known,
+      // or "cover"/"stretch" zoom modes, which don't use the computed box
+      // at all) falls back to a short fixed buffer, same as before.
+      const isPreSizedContain = zoomMode === "contain" && naturalSize !== null;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (isPreSizedContain) {
+            markPictureReady();
+          } else {
+            revealTimerRef.current = setTimeout(
+              markPictureReady,
+              NON_CONTAIN_REVEAL_DELAY_MS,
+            );
+          }
+        });
+      });
+    }, [markPictureReady, zoomMode, naturalSize]);
+
+    // The letterboxed box for "contain": computed from the real video
+    // dimensions against the actual screen size, so the <Video> component
+    // can be mounted already at its final correct shape instead of full
+    // screen and later corrected by native. Falls back to full-screen sizing
+    // (the old behavior) until naturalSize is known, or for zoom modes that
+    // don't need this at all.
+    const containerStyle = useMemo(() => {
+      if (
+        zoomMode !== "contain" ||
+        !naturalSize ||
+        !screenWidth ||
+        !screenHeight
+      ) {
+        return StyleSheet.absoluteFillObject;
+      }
+      const videoAspect = naturalSize.width / naturalSize.height;
+      const screenAspect = screenWidth / screenHeight;
+      const boxWidth =
+        videoAspect > screenAspect ? screenWidth : screenHeight * videoAspect;
+      const boxHeight =
+        videoAspect > screenAspect ? screenWidth / videoAspect : screenHeight;
+      return {
+        position: "absolute" as const,
+        width: boxWidth,
+        height: boxHeight,
+        left: (screenWidth - boxWidth) / 2,
+        top: (screenHeight - boxHeight) / 2,
+      };
+    }, [zoomMode, naturalSize, screenWidth, screenHeight]);
+
+    // Once the container above is already the correctly-shaped box, the
+    // video just needs to fill it exactly — COVER does that with no
+    // cropping (the box's aspect ratio already matches the video's), and
+    // critically involves no letterbox transform for native to compute
+    // asynchronously. For every other case (naturalSize not yet known, or
+    // "cover"/"stretch" zoom modes), fall back to the real resizeMode as
+    // before.
+    const effectiveResizeMode =
+      zoomMode === "contain" && naturalSize
+        ? ResizeMode.COVER
+        : ZOOM_MODE_TO_RESIZE_MODE[zoomMode];
 
     return (
-      <>
-        <Video
-          ref={ref}
-          // paused/muted are deliberately declared before source: this
-          // native module applies props one at a time in roughly this
-          // order, and setting the source is what actually creates the
-          // player and applies its initial paused/muted state — so these
-          // need to already be known by that point rather than arriving
-          // after, which is exactly the kind of ordering race that caused
-          // audio to ignore an initial paused={true} in the first place.
-          paused={paused}
-          // Silences output only — playback/decoding keep running on their
-          // own schedule underneath (see audioMuted above), so this doesn't
-          // delay the picture the way holding `paused` did.
-          muted={audioMuted}
-          source={{
-            uri,
-            startPosition: startPositionSeconds
-              ? Math.floor(startPositionSeconds * 1000)
-              : undefined,
-            bufferConfig: LOCAL_FILE_BUFFER_CONFIG,
-          }}
-          style={StyleSheet.absoluteFill}
-          resizeMode={ZOOM_MODE_TO_RESIZE_MODE[zoomMode]}
-          // Android's default renderer (SurfaceView) punches through the
-          // normal view hierarchy and doesn't reliably composite beneath a
-          // plain sibling view the way the poster below assumes — TextureView
-          // is a real View and always does, at a small perf/battery cost
-          // that's a non-issue for this app's single-video-at-a-time player.
-          viewType={ViewType.TEXTURE}
-          rate={rate}
-          repeat={loop}
-          selectedAudioTrack={
-            selectedAudioTrackIndex !== undefined &&
-            selectedAudioTrackIndex !== null
-              ? {
-                  type: SelectedTrackType.INDEX,
-                  value: selectedAudioTrackIndex,
-                }
-              : undefined
-          }
-          progressUpdateInterval={250}
-          enterPictureInPictureOnLeave={enterPictureInPictureOnLeave}
-          onLoad={onLoad}
-          onProgress={onProgress}
-          onBuffer={onBuffer}
-          onEnd={onEnd}
-          onError={onError}
-          onAudioTracks={onAudioTracks}
-          onReadyForDisplay={handleReadyForDisplay}
-          onPictureInPictureStatusChanged={(
-            e: OnPictureInPictureStatusChangedData,
-          ) => onPictureInPictureStatusChanged?.(e.isActive)}
-          onRestoreUserInterfaceForPictureInPictureStop={
-            onRestoreUserInterfaceForPictureInPictureStop
-          }
-          playInBackground={false}
-          playWhenInactive={false}
-        />
-        {posterUri && posterVisible ? (
-          <Image
-            source={{ uri: posterUri }}
-            resizeMode={zoomMode}
+      <View style={styles.blackBackdrop}>
+        <View style={containerStyle}>
+          <Video
+            ref={ref}
+            // paused/muted are deliberately declared before source: this
+            // native module applies props one at a time in roughly this
+            // order, and setting the source is what actually creates the
+            // player and applies its initial paused/muted state — so these
+            // need to already be known by that point rather than arriving
+            // after, which is exactly the kind of ordering race that caused
+            // audio to ignore an initial paused={true} in the first place.
+            paused={paused}
+            // Silences output only — playback/decoding keep running on
+            // their own schedule underneath (see audioMuted above), so this
+            // doesn't delay the picture the way holding `paused` did.
+            muted={audioMuted}
+            source={{
+              uri,
+              startPosition: startPositionSeconds
+                ? Math.floor(startPositionSeconds * 1000)
+                : undefined,
+              bufferConfig: LOCAL_FILE_BUFFER_CONFIG,
+            }}
             style={StyleSheet.absoluteFill}
+            resizeMode={effectiveResizeMode}
+            // TEXTURE composites reliably beneath the cover overlay below (a
+            // real sibling View); SurfaceView punches through the view
+            // hierarchy and isn't guaranteed to layer under a plain sibling
+            // the same way.
+            viewType={ViewType.TEXTURE}
+            rate={rate}
+            repeat={loop}
+            selectedAudioTrack={
+              selectedAudioTrackIndex !== undefined &&
+              selectedAudioTrackIndex !== null
+                ? {
+                    type: SelectedTrackType.INDEX,
+                    value: selectedAudioTrackIndex,
+                  }
+                : undefined
+            }
+            progressUpdateInterval={250}
+            enterPictureInPictureOnLeave={enterPictureInPictureOnLeave}
+            onLoad={handleLoad}
+            onProgress={onProgress}
+            onBuffer={onBuffer}
+            onEnd={onEnd}
+            onError={onError}
+            onAudioTracks={onAudioTracks}
+            onReadyForDisplay={handleReadyForDisplay}
+            onPictureInPictureStatusChanged={(
+              e: OnPictureInPictureStatusChangedData,
+            ) => onPictureInPictureStatusChanged?.(e.isActive)}
+            onRestoreUserInterfaceForPictureInPictureStop={
+              onRestoreUserInterfaceForPictureInPictureStop
+            }
+            playInBackground={false}
+            playWhenInactive={false}
           />
+        </View>
+        {coverVisible ? (
+          posterUri ? (
+            <Image
+              source={{ uri: posterUri }}
+              resizeMode={zoomMode}
+              style={StyleSheet.absoluteFill}
+            />
+          ) : (
+            // No thumbnail available for this mount (e.g. a reloadToken
+            // remount mid-playback — see PlayerScreen). A plain cover still
+            // masks the same startup gap a thumbnail would, without
+            // flashing an unrelated static image mid-playback.
+            <View style={[StyleSheet.absoluteFill, styles.plainCover]} />
+          )
         ) : null}
-      </>
+      </View>
     );
   },
 );
+
+const styles = StyleSheet.create({
+  blackBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#000",
+  },
+  plainCover: {
+    backgroundColor: "#000",
+  },
+});
