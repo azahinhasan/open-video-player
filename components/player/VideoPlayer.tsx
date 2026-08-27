@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import { Image, StyleSheet } from "react-native";
 import Video, {
+  BufferConfig,
   OnAudioTracksData,
   OnBufferData,
   OnLoadData,
@@ -9,9 +10,26 @@ import Video, {
   OnVideoErrorData,
   ResizeMode,
   SelectedTrackType,
-  ViewType,
   VideoRef,
+  ViewType,
 } from "react-native-video";
+
+// ExoPlayer's defaults (minBufferMs ~15s, maxBufferMs ~50s,
+// bufferForPlaybackMs ~2.5s) are tuned for network streaming, where they're
+// a safety margin against stalls. This app only ever plays local files —
+// already fully readable from disk the instant they're opened, with none of
+// the network round-trips those margins exist for — so bufferForPlaybackMs
+// in particular (how much must be buffered before playback *starts*) was
+// pure added startup latency here, not a safety margin buying anything.
+// One aggressive local-optimized config, applied to every source; if
+// streaming is ever added, that's the point to branch this by source type,
+// not before.
+const LOCAL_FILE_BUFFER_CONFIG: BufferConfig = {
+  minBufferMs: 1000,
+  maxBufferMs: 3000,
+  bufferForPlaybackMs: 200,
+  bufferForPlaybackAfterRebufferMs: 500,
+};
 
 // react-native-video's own onReadyForDisplay-driven poster hide fires as
 // soon as ExoPlayer reaches STATE_READY — well before the native PlayerView
@@ -31,7 +49,7 @@ import Video, {
 // the same gap instead of overlapping it, making the total wait longer.
 // Reverted; audio starting ahead of the picture is masked (not eliminated)
 // by the poster below instead.
-const POSTER_HIDE_DELAY_MS = 4500;
+const POSTER_HIDE_DELAY_MS = 0;
 
 // Safety net in case onReadyForDisplay never fires for this source (an
 // audio-only file has no video frame to report ready, and a genuinely
@@ -200,6 +218,7 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
             startPosition: startPositionSeconds
               ? Math.floor(startPositionSeconds * 1000)
               : undefined,
+            bufferConfig: LOCAL_FILE_BUFFER_CONFIG,
           }}
           style={StyleSheet.absoluteFill}
           resizeMode={ZOOM_MODE_TO_RESIZE_MODE[zoomMode]}

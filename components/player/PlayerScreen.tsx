@@ -1,14 +1,22 @@
-import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
-import { Directory, File, Paths } from 'expo-file-system';
-import { useKeepAwake } from 'expo-keep-awake';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as ScreenOrientation from 'expo-screen-orientation';
-import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useSharedValue } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from "@expo/vector-icons";
+import * as DocumentPicker from "expo-document-picker";
+import { Directory, File, Paths } from "expo-file-system";
+import { useKeepAwake } from "expo-keep-awake";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import * as ScreenOrientation from "expo-screen-orientation";
+import { StatusBar } from "expo-status-bar";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Alert,
+  AppState,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useSharedValue } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
   AudioTrack,
   OnAudioTracksData,
@@ -17,24 +25,31 @@ import type {
   OnProgressData,
   OnVideoErrorData,
   VideoRef,
-} from 'react-native-video';
-import { VolumeManager } from 'react-native-volume-manager';
+} from "react-native-video";
+import { VolumeManager } from "react-native-volume-manager";
 
-import { ControlsOverlay } from '@/components/player/ControlsOverlay';
-import { GestureLayer } from '@/components/player/GestureLayer';
-import { SubtitleOverlay } from '@/components/player/SubtitleOverlay';
-import { VideoPlayer, type VideoZoomMode } from '@/components/player/VideoPlayer';
-import { useImmersiveMode } from '@/hooks/useImmersiveMode';
-import { useOrientationLock } from '@/hooks/useOrientationLock';
-import { usePlaybackPreferences } from '@/hooks/usePlaybackPreferences';
-import { adjacentVideoId, usePlaybackStore } from '@/hooks/usePlaybackStore';
-import { useAccentColor } from '@/hooks/useThemePreference';
-import type { VideoAsset } from '@/types/video';
-import { findSidecarSubtitle, isSubtitleFilename, loadSubtitleCues } from '@/utils/subtitles';
-import type { SubtitleCue } from '@/utils/subtitleParser';
+import { ControlsOverlay } from "@/components/player/ControlsOverlay";
+import { GestureLayer } from "@/components/player/GestureLayer";
+import { SubtitleOverlay } from "@/components/player/SubtitleOverlay";
+import {
+  VideoPlayer,
+  type VideoZoomMode,
+} from "@/components/player/VideoPlayer";
+import { useImmersiveMode } from "@/hooks/useImmersiveMode";
+import { useOrientationLock } from "@/hooks/useOrientationLock";
+import { usePlaybackPreferences } from "@/hooks/usePlaybackPreferences";
+import { adjacentVideoId, usePlaybackStore } from "@/hooks/usePlaybackStore";
+import { useAccentColor } from "@/hooks/useThemePreference";
+import type { VideoAsset } from "@/types/video";
+import type { SubtitleCue } from "@/utils/subtitleParser";
+import {
+  findSidecarSubtitle,
+  isSubtitleFilename,
+  loadSubtitleCues,
+} from "@/utils/subtitles";
 
 const AUTO_HIDE_DELAY_MS = 3000;
-const ZOOM_CYCLE: VideoZoomMode[] = ['contain', 'cover', 'stretch'];
+const ZOOM_CYCLE: VideoZoomMode[] = ["contain", "cover", "stretch"];
 // Generously covers the SeekBar's touch area plus the time row beneath
 // it, so GestureLayer's full-screen zones don't compete with the seek bar's
 // own gesture for taps while the bottom bar is actually on screen. When the
@@ -45,7 +60,7 @@ const BOTTOM_CONTROLS_TOUCH_HEIGHT_WITH_TRANSPORT = 190;
 // Picture-in-Picture needs API 26 (Android 8.0) — Platform.Version on Android
 // is the SDK int directly, so this hides the button on unsupported devices
 // instead of leaving a control that silently no-ops.
-const PIP_SUPPORTED = Platform.OS === 'android' && Platform.Version >= 26;
+const PIP_SUPPORTED = Platform.OS === "android" && Platform.Version >= 26;
 // Small clearance above the safe area when the controls bar is hidden, and
 // above the controls bar itself (plus its own safe-area padding) when it's
 // visible — computed from insets.bottom rather than a flat constant so this
@@ -63,7 +78,7 @@ function resolveResumeSeconds(video: VideoAsset | null): number {
   if (!video) {
     return 0;
   }
-  if (usePlaybackPreferences.getState().resumeBehavior === 'restart') {
+  if (usePlaybackPreferences.getState().resumeBehavior === "restart") {
     return 0;
   }
   return usePlaybackStore.getState().positionFor(video.id);
@@ -78,14 +93,17 @@ type PlayerScreenProps = {
    * inside the vault's route tree (and therefore its lock/re-lock
    * boundary) instead of escaping to the unprotected top-level player.
    */
-  playerBasePath?: '/player' | '/vault/player';
+  playerBasePath?: "/player" | "/vault/player";
 };
 
-export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) {
+export function PlayerScreen({
+  playerBasePath = "/player",
+}: PlayerScreenProps) {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queue = usePlaybackStore((s) => s.queue);
   const paused = usePlaybackStore((s) => s.paused);
+  const play = usePlaybackStore((s) => s.play);
   const togglePlayPause = usePlaybackStore((s) => s.togglePlayPause);
   const savePosition = usePlaybackStore((s) => s.savePosition);
 
@@ -95,10 +113,14 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
   const insets = useSafeAreaInsets();
   const controlsLayout = usePlaybackPreferences((s) => s.controlsLayout);
   const bottomControlsTouchHeight =
-    controlsLayout === 'bottom' ? BOTTOM_CONTROLS_TOUCH_HEIGHT_WITH_TRANSPORT : BOTTOM_CONTROLS_TOUCH_HEIGHT_CENTER;
+    controlsLayout === "bottom"
+      ? BOTTOM_CONTROLS_TOUCH_HEIGHT_WITH_TRANSPORT
+      : BOTTOM_CONTROLS_TOUCH_HEIGHT_CENTER;
 
   const [duration, setDuration] = useState(() => video?.duration ?? 0);
-  const [currentTime, setCurrentTime] = useState(() => resolveResumeSeconds(video));
+  const [currentTime, setCurrentTime] = useState(() =>
+    resolveResumeSeconds(video),
+  );
   // False from the moment a video is opened until VideoPlayer's picture is
   // actually visually accurate (see handlePictureReady) — audio/playback
   // itself isn't gated on this (see VideoPlayer's POSTER_HIDE_DELAY_MS
@@ -122,15 +144,19 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
   const [buffering, setBuffering] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [controlsVisible, setControlsVisible] = useState(true);
-  const [orientationLock, setOrientationLock] = useState(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+  const [orientationLock, setOrientationLock] = useState(
+    ScreenOrientation.OrientationLock.PORTRAIT_UP,
+  );
   const [locked, setLocked] = useState(false);
   const [rate, setRate] = useState(1);
   const [loop, setLoop] = useState(false);
-  const [zoomMode, setZoomMode] = useState<VideoZoomMode>('contain');
+  const [zoomMode, setZoomMode] = useState<VideoZoomMode>("contain");
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
-  const [selectedAudioTrackIndex, setSelectedAudioTrackIndex] = useState<number | null>(null);
+  const [selectedAudioTrackIndex, setSelectedAudioTrackIndex] = useState<
+    number | null
+  >(null);
   const [pipActive, setPipActive] = useState(false);
   // Bumped to force VideoPlayer to fully remount (a fresh native player
   // instance) when recovering from a fatal playback error — ExoPlayer's
@@ -142,7 +168,9 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
   // switching videos) and overwriting the cues with stale results.
   const subtitleRequestIdRef = useRef<string | null>(null);
 
-  const hasManualSubtitleOverride = usePlaybackStore((s) => (id ? s.subtitleOverrides[id] !== undefined : false));
+  const hasManualSubtitleOverride = usePlaybackStore((s) =>
+    id ? s.subtitleOverrides[id] !== undefined : false,
+  );
 
   // Single source of truth for media volume, shared between GestureLayer's
   // swipe gesture and the mute button — both read/write this same value so
@@ -161,7 +189,7 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
     // alarm, system, call) — ignore anything that isn't the music stream, or
     // it'll get treated as if playback volume itself changed.
     const subscription = VolumeManager.addVolumeListener((result) => {
-      if (result.type && result.type !== 'music') {
+      if (result.type && result.type !== "music") {
         return;
       }
       volumeLevel.value = result.volume;
@@ -174,9 +202,12 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
     (value: number) => {
       const clamped = Math.min(1, Math.max(0, value));
       volumeLevel.value = clamped;
-      VolumeManager.setVolume(clamped, { showUI: false, playSound: false }).catch(() => {});
+      VolumeManager.setVolume(clamped, {
+        showUI: false,
+        playSound: false,
+      }).catch(() => {});
     },
-    [volumeLevel]
+    [volumeLevel],
   );
 
   // Refs mirror the latest video/time/duration so the unmount cleanup and
@@ -199,7 +230,11 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
   const persistCurrentPosition = useCallback(() => {
     const currentVideo = currentVideoRef.current;
     if (currentVideo) {
-      savePosition(currentVideo.id, currentTimeRef.current, durationRef.current);
+      savePosition(
+        currentVideo.id,
+        currentTimeRef.current,
+        durationRef.current,
+      );
     }
   }, [savePosition]);
 
@@ -220,8 +255,8 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
   // while pipActive: that's the one case backgrounding is expected to keep
   // playing, since the user explicitly chose PiP via its button.
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'background' || nextState === 'inactive') {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "background" || nextState === "inactive") {
         persistCurrentPosition();
         if (!pipActive) {
           usePlaybackStore.getState().pause();
@@ -248,7 +283,10 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
       // Nothing is playing — leave the controls up until the next interaction.
       return;
     }
-    hideTimerRef.current = setTimeout(() => setControlsVisible(false), AUTO_HIDE_DELAY_MS);
+    hideTimerRef.current = setTimeout(
+      () => setControlsVisible(false),
+      AUTO_HIDE_DELAY_MS,
+    );
   }, [clearHideTimer]);
 
   const showControls = useCallback(() => {
@@ -270,7 +308,8 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
 
   const loadSubtitlesFor = useCallback((targetVideo: VideoAsset) => {
     subtitleRequestIdRef.current = targetVideo.id;
-    const override = usePlaybackStore.getState().subtitleOverrides[targetVideo.id];
+    const override =
+      usePlaybackStore.getState().subtitleOverrides[targetVideo.id];
     const sourceUri = override ?? findSidecarSubtitle(targetVideo);
     if (!sourceUri) {
       setSubtitleCues([]);
@@ -299,7 +338,7 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
     setLocked(false);
     setRate(1);
     setLoop(false);
-    setZoomMode('contain');
+    setZoomMode("contain");
     setSubtitlesEnabled(true);
     setSubtitleCues([]);
     setAudioTracks([]);
@@ -318,11 +357,7 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
     }
 
     usePlaybackStore.getState().markViewed(id);
-    // Opens paused rather than autoplaying — the user taps play to start.
-    // setQueue (run just before navigating here, from the folder/vault/
-    // search screens) leaves paused false, so this needs to explicitly
-    // override it rather than relying on that default.
-    usePlaybackStore.getState().pause();
+    play();
     showControls();
     return clearHideTimer;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -335,10 +370,12 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
       }
       savePosition(video.id, currentTime, duration);
       router.replace(
-        playerBasePath === '/vault/player' ? `/vault/player/${targetId}` : `/player/${targetId}`
+        playerBasePath === "/vault/player"
+          ? `/vault/player/${targetId}`
+          : `/player/${targetId}`,
       );
     },
-    [video, currentTime, duration, savePosition, router, playerBasePath]
+    [video, currentTime, duration, savePosition, router, playerBasePath],
   );
 
   const handleEnd = useCallback(() => {
@@ -353,9 +390,21 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
     }
     const nextId = adjacentVideoId(queue, video.id, 1);
     if (nextId) {
-      router.replace(playerBasePath === '/vault/player' ? `/vault/player/${nextId}` : `/player/${nextId}`);
+      router.replace(
+        playerBasePath === "/vault/player"
+          ? `/vault/player/${nextId}`
+          : `/player/${nextId}`,
+      );
     }
-  }, [video, queue, duration, savePosition, router, showControls, playerBasePath]);
+  }, [
+    video,
+    queue,
+    duration,
+    savePosition,
+    router,
+    showControls,
+    playerBasePath,
+  ]);
 
   const handleLoad = useCallback((data: OnLoadData) => {
     setDuration(data.duration);
@@ -395,7 +444,7 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
 
   const handleError = useCallback(
     (data: OnVideoErrorData) => {
-      const errorString = data.error?.errorString ?? '';
+      const errorString = data.error?.errorString ?? "";
       // A track the user explicitly switched to can fail to decode on this
       // specific device (confirmed cause: codecs like Dolby Digital Plus
       // (E-AC3) have no hardware decoder on most Android devices, and
@@ -408,22 +457,26 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
       // native automatic selection — the same state that was already
       // proven working — and force a fresh player instance (ExoPlayer's
       // error state needs a new source, not just a prop change, to clear).
-      if (/decoder_init_failed/i.test(errorString) && selectedAudioTrackIndex !== null && video) {
+      if (
+        /decoder_init_failed/i.test(errorString) &&
+        selectedAudioTrackIndex !== null &&
+        video
+      ) {
         setSelectedAudioTrackIndex(null);
         savePosition(video.id, currentTimeRef.current, durationRef.current);
         setReloadToken((t) => t + 1);
         Alert.alert(
           "Can't use that audio track",
-          'This audio track is not supported on this device. Playback switched back to the default one.'
+          "This audio track is not supported on this device. Playback switched back to the default one.",
         );
         return;
       }
 
       setErrorMessage(
-        `Can't play "${video?.filename ?? 'this video'}". ${errorString || 'This format is not supported.'}`
+        `Can't play "${video?.filename ?? "this video"}". ${errorString || "This format is not supported."}`,
       );
     },
-    [video, savePosition, selectedAudioTrackIndex]
+    [video, savePosition, selectedAudioTrackIndex],
   );
 
   const seekTo = useCallback(
@@ -435,14 +488,14 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
       videoRef.current.seek(clamped);
       setCurrentTime(clamped);
     },
-    [duration]
+    [duration],
   );
 
   const seekBy = useCallback(
     (deltaSeconds: number) => {
       seekTo(currentTime + deltaSeconds);
     },
-    [currentTime, seekTo]
+    [currentTime, seekTo],
   );
 
   const handleScrubStart = useCallback(() => {
@@ -457,7 +510,7 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
     setOrientationLock((prev) =>
       prev === ScreenOrientation.OrientationLock.LANDSCAPE
         ? ScreenOrientation.OrientationLock.PORTRAIT_UP
-        : ScreenOrientation.OrientationLock.LANDSCAPE
+        : ScreenOrientation.OrientationLock.LANDSCAPE,
     );
   }, []);
 
@@ -468,31 +521,43 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
       savePosition(video.id, currentTime, duration);
     }
     showControls();
-  }, [togglePlayPause, video, currentTime, duration, savePosition, showControls]);
+  }, [
+    togglePlayPause,
+    video,
+    currentTime,
+    duration,
+    savePosition,
+    showControls,
+  ]);
 
   const handleCycleZoomMode = useCallback(() => {
-    setZoomMode((prev) => ZOOM_CYCLE[(ZOOM_CYCLE.indexOf(prev) + 1) % ZOOM_CYCLE.length]);
+    setZoomMode(
+      (prev) => ZOOM_CYCLE[(ZOOM_CYCLE.indexOf(prev) + 1) % ZOOM_CYCLE.length],
+    );
   }, []);
 
   const handleSelectSubtitleFile = useCallback(async () => {
     if (!video) {
       return;
     }
-    const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+    const result = await DocumentPicker.getDocumentAsync({
+      type: "*/*",
+      copyToCacheDirectory: true,
+    });
     if (result.canceled || result.assets.length === 0) {
       return;
     }
     const picked = result.assets[0];
     if (!isSubtitleFilename(picked.name)) {
-      Alert.alert('Not a subtitle file', 'Please choose a .srt or .vtt file.');
+      Alert.alert("Not a subtitle file", "Please choose a .srt or .vtt file.");
       return;
     }
     try {
       // Copies the picked file into app storage under a name keyed by video
       // id, rather than keeping the picker's own uri — a document-picker
       // uri isn't guaranteed to still be readable on a later app launch.
-      const ext = picked.name.toLowerCase().endsWith('.vtt') ? '.vtt' : '.srt';
-      const dir = new Directory(Paths.document, 'subtitles');
+      const ext = picked.name.toLowerCase().endsWith(".vtt") ? ".vtt" : ".srt";
+      const dir = new Directory(Paths.document, "subtitles");
       if (!dir.exists) {
         dir.create({ intermediates: true, idempotent: true });
       }
@@ -501,10 +566,15 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
         destination.delete();
       }
       new File(picked.uri).copy(destination);
-      usePlaybackStore.getState().setSubtitleOverride(video.id, destination.uri);
+      usePlaybackStore
+        .getState()
+        .setSubtitleOverride(video.id, destination.uri);
       loadSubtitlesFor(video);
     } catch {
-      Alert.alert("Couldn't load subtitle", 'The file could not be read. Please try again.');
+      Alert.alert(
+        "Couldn't load subtitle",
+        "The file could not be read. Please try again.",
+      );
     }
   }, [video, loadSubtitlesFor]);
 
@@ -528,7 +598,9 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
     setPipActive(false);
     // Tells Android the JS side has finished restoring its UI — without this
     // the app can be left in a stuck/blank state after leaving PiP.
-    videoRef.current?.restoreUserInterfaceForPictureInPictureStopCompleted?.(true);
+    videoRef.current?.restoreUserInterfaceForPictureInPictureStopCompleted?.(
+      true,
+    );
   }, []);
 
   const handleBack = useCallback(() => {
@@ -542,10 +614,13 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
     return (
       <View style={styles.center}>
         <StatusBar hidden={!controlsVisible} animated />
-        <Text style={styles.errorText}>This video is no longer in the queue.</Text>
+        <Text style={styles.errorText}>
+          This video is no longer in the queue.
+        </Text>
         <Pressable
           style={[styles.backButton, { backgroundColor: accentColor }]}
-          onPress={() => router.back()}>
+          onPress={() => router.back()}
+        >
           <Text style={styles.controlText}>Back to library</Text>
         </Pressable>
       </View>
@@ -568,7 +643,9 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
   // reflects reality either way, since audioTracks is kept live via
   // onAudioTracks, not just assumed from our own last request.
   const displayedAudioTrackIndex =
-    selectedAudioTrackIndex ?? audioTracks.find((track) => track.selected)?.index ?? null;
+    selectedAudioTrackIndex ??
+    audioTracks.find((track) => track.selected)?.index ??
+    null;
 
   // Frozen at the resumed start position until the picture itself is ready
   // to show — see pictureReady above. Only feeds UI display (seek bar,
@@ -582,7 +659,10 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
       {errorMessage ? (
         <View style={styles.center}>
           <Text style={styles.errorText}>{errorMessage}</Text>
-          <Pressable style={[styles.backButton, { backgroundColor: accentColor }]} onPress={handleBack}>
+          <Pressable
+            style={[styles.backButton, { backgroundColor: accentColor }]}
+            onPress={handleBack}
+          >
             <Text style={styles.controlText}>Back to library</Text>
           </Pressable>
         </View>
@@ -630,7 +710,11 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
           )}
 
           {pipActive ? null : locked ? (
-            <Pressable style={styles.unlockButton} onPress={() => setLocked(false)} hitSlop={16}>
+            <Pressable
+              style={styles.unlockButton}
+              onPress={() => setLocked(false)}
+              hitSlop={16}
+            >
               <Ionicons name="lock-closed-outline" size={22} color="#fff" />
             </Pressable>
           ) : (
@@ -660,7 +744,10 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
                 buffering={buffering}
                 hasNext={hasNext}
                 hasPrevious={hasPrevious}
-                isLandscape={orientationLock === ScreenOrientation.OrientationLock.LANDSCAPE}
+                isLandscape={
+                  orientationLock ===
+                  ScreenOrientation.OrientationLock.LANDSCAPE
+                }
                 videoUri={video.uri}
                 videoId={video.id}
                 rate={rate}
@@ -715,19 +802,19 @@ export function PlayerScreen({ playerBasePath = '/player' }: PlayerScreenProps) 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: "#000",
   },
   center: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     gap: 12,
     paddingHorizontal: 32,
-    backgroundColor: '#000',
+    backgroundColor: "#000",
   },
   errorText: {
-    color: '#fff',
-    textAlign: 'center',
+    color: "#fff",
+    textAlign: "center",
     fontSize: 15,
   },
   backButton: {
@@ -737,18 +824,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   controlText: {
-    color: '#fff',
-    fontWeight: '600',
+    color: "#fff",
+    fontWeight: "600",
   },
   unlockButton: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 24,
     left: 24,
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
