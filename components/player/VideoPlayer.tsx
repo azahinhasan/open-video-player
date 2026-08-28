@@ -79,6 +79,8 @@ type NaturalSize = { width: number; height: number };
 type VideoPlayerProps = {
   uri: string;
   paused: boolean;
+  /** User-facing mute (the player's mute button/volume-zero gesture) — combined with the internal startup-sync mute below, not a replacement for it. */
+  muted?: boolean;
   startPositionSeconds?: number;
   rate?: number;
   loop?: boolean;
@@ -154,6 +156,7 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
     {
       uri,
       paused,
+      muted = false,
       startPositionSeconds,
       rate = 1,
       loop = false,
@@ -195,7 +198,7 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
     // surface-attach itself rather than overlapping with it). Audio simply
     // stays silent until the real picture is ready to be heard alongside,
     // instead of playing over the still-showing cover.
-    const [audioMuted, setAudioMuted] = useState(true);
+    const [startupMuted, setStartupMuted] = useState(true);
     const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const readyForDisplayFiredRef = useRef(false);
@@ -210,7 +213,7 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
         revealTimerRef.current = null;
       }
       setCoverVisible(false);
-      setAudioMuted(false);
+      setStartupMuted(false);
       onPictureReady?.();
     }, [onPictureReady]);
 
@@ -225,7 +228,7 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
     useEffect(() => {
       readyForDisplayFiredRef.current = false;
       setCoverVisible(true);
-      setAudioMuted(true);
+      setStartupMuted(true);
       fallbackTimerRef.current = setTimeout(
         markPictureReady,
         READY_FALLBACK_TIMEOUT_MS,
@@ -353,10 +356,13 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
             // after, which is exactly the kind of ordering race that caused
             // audio to ignore an initial paused={true} in the first place.
             paused={paused}
-            // Silences output only — playback/decoding keep running on
-            // their own schedule underneath (see audioMuted above), so this
-            // doesn't delay the picture the way holding `paused` did.
-            muted={audioMuted}
+            // startupMuted silences output only until the picture is ready
+            // — playback/decoding keep running on their own schedule
+            // underneath, so this doesn't delay the picture the way holding
+            // `paused` did (see the effect above). Combined with the
+            // caller's own user-facing `muted` (the mute button/volume-zero
+            // gesture) via OR, since either one wanting silence should win.
+            muted={startupMuted || muted}
             source={{
               uri,
               startPosition: startPositionSeconds

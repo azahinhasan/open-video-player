@@ -4,7 +4,7 @@ import { accentPalette } from '@/theme/tokens';
 
 const PREFERENCE_FILE_NAME = 'theme-preference.json';
 
-export type ThemeMode = 'system' | 'light' | 'dark';
+export type ThemeMode = 'system' | 'light' | 'dark' | 'warm';
 
 export type ThemePreference = {
   mode: ThemeMode;
@@ -13,7 +13,7 @@ export type ThemePreference = {
 };
 
 const DEFAULT_PREFERENCE: ThemePreference = { mode: 'system', accent: accentPalette.tomato };
-const VALID_MODES: ThemeMode[] = ['system', 'light', 'dark'];
+const VALID_MODES: ThemeMode[] = ['system', 'light', 'dark', 'warm'];
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
 
 function preferenceFile(): File {

@@ -23,6 +23,16 @@ const palette = {
   textSecondaryLight: '#5C5F63',
   textMutedLight: '#9A9D9F',
 
+  // Warm — a sepia/cream reading-mode palette, distinct from Light rather
+  // than a tinted variant of it (warmer background, warm-brown text instead
+  // of neutral gray, same idea as an e-reader's "sepia" mode).
+  warmPaper: '#F4E8D0',
+  surfaceWarm: '#FBF3E1',
+  surfaceBorderWarm: '#E2D0A8',
+  textPrimaryWarm: '#3A2E1C',
+  textSecondaryWarm: '#6E5A3C',
+  textMutedWarm: '#A28F68',
+
   // Tomato Rail — the default accent. A deepened version of pure tomato
   // (#FF6347) so it holds contrast for text/icons on top of it; pure tomato
   // is reserved for the icon/marketing gradient, never used flat in UI.
@@ -70,6 +80,16 @@ export const themeColors = {
     textSecondary: palette.textSecondaryLight,
     textMuted: palette.textMutedLight,
     icon: palette.textSecondaryLight,
+    danger: palette.danger,
+  },
+  warm: {
+    background: palette.warmPaper,
+    surface: palette.surfaceWarm,
+    surfaceBorder: palette.surfaceBorderWarm,
+    text: palette.textPrimaryWarm,
+    textSecondary: palette.textSecondaryWarm,
+    textMuted: palette.textMutedWarm,
+    icon: palette.textSecondaryWarm,
     danger: palette.danger,
   },
 } as const;

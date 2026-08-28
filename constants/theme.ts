@@ -1,6 +1,7 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * Values are sourced from theme/tokens.ts, the app's single design-token source of truth.
+ * Below are the colors that are used in the app. The colors are defined per
+ * theme mode (light, dark, warm). Values are sourced from theme/tokens.ts,
+ * the app's single design-token source of truth.
  */
 
 import { Platform } from 'react-native';

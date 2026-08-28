@@ -189,11 +189,19 @@ export function PlayerScreen({
   // caching its own copy and waiting on a native "volume changed" event that
   // never actually echoes back for changes the app itself triggered.
   const volumeLevel = useSharedValue(0.5);
+  // Plain (non-Reanimated) mirror of volumeLevel <= 0 — VideoPlayer isn't
+  // Reanimated-aware, so it needs a normal prop it can react to. Driving
+  // the video's own `muted` from this directly (rather than counting on
+  // system media volume actually reaching audible zero) is what makes
+  // muting reliable regardless of OS/device volume-service quirks; system
+  // volume is still zeroed too, below, since that's expected independently.
+  const [volumeMuted, setVolumeMuted] = useState(() => volumeLevel.value <= 0);
 
   useEffect(() => {
     VolumeManager.getVolume()
       .then((result) => {
         volumeLevel.value = result.volume;
+        setVolumeMuted(result.volume <= 0);
       })
       .catch(() => {});
     // The native event also fires for non-media streams (ring, notification,
@@ -204,6 +212,7 @@ export function PlayerScreen({
         return;
       }
       volumeLevel.value = result.volume;
+      setVolumeMuted(result.volume <= 0);
     });
     return () => subscription.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -213,6 +222,7 @@ export function PlayerScreen({
     (value: number) => {
       const clamped = Math.min(1, Math.max(0, value));
       volumeLevel.value = clamped;
+      setVolumeMuted(clamped <= 0);
       VolumeManager.setVolume(clamped, {
         showUI: false,
         playSound: false,
@@ -684,6 +694,7 @@ export function PlayerScreen({
             ref={videoRef}
             uri={video.uri}
             paused={paused}
+            muted={volumeMuted}
             startPositionSeconds={resolveResumeSeconds(video)}
             rate={rate}
             loop={loop}

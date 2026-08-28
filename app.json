@@ -4,14 +4,14 @@
     "slug": "video-player-app",
     "version": "0.0.7",
     "orientation": "portrait",
-    "icon": "./assets/images/splash-icon-tomato-2048.png",
+    "icon": "./assets/images/icon-tomato-final-1024.png",
     "scheme": "videoplayerappmobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0B0C0E",
-        "foregroundImage": "./assets/images/splash-icon-tomato-2048.png"
+        "foregroundImage": "./assets/images/adaptive-icon-tomato-foreground.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -23,7 +23,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon-tomato-2048.png",
+          "image": "./assets/images/adaptive-icon-tomato-foreground.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#0B0C0E"

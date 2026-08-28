@@ -2,7 +2,7 @@ import { useColorScheme as useSystemColorScheme } from 'react-native';
 
 import { useThemePreference } from '@/hooks/useThemePreference';
 
-export function useColorScheme(): 'light' | 'dark' {
+export function useColorScheme(): 'light' | 'dark' | 'warm' {
   const systemScheme = useSystemColorScheme();
   const mode = useThemePreference((s) => s.mode);
 
