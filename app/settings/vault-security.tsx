@@ -59,11 +59,7 @@ export default function VaultSecuritySettingsScreen() {
         showsVerticalScrollIndicator={false}>
         <Card>
           <View style={styles.row}>
-            <Ionicons
-              name="finger-print-outline"
-              size={20}
-              color={vaultBiometricsEnabled ? accentColor : mutedColor}
-            />
+            <Ionicons name="finger-print-outline" size={20} color={accentColor} />
             <ThemedText style={styles.rowLabel}>Unlock with biometrics</ThemedText>
             <View style={styles.rowSpacer} />
             <PinGatedSwitch
@@ -82,7 +78,7 @@ export default function VaultSecuritySettingsScreen() {
             <>
               <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
               <Pressable style={styles.row} onPress={() => setPinSheetVisible(true)}>
-                <Ionicons name="keypad-outline" size={20} color={mutedColor} />
+                <Ionicons name="keypad-outline" size={20} color={accentColor} />
                 <ThemedText style={styles.rowLabel}>Change Vault PIN</ThemedText>
                 <View style={styles.rowSpacer} />
                 <Ionicons name="chevron-forward" size={18} color={mutedColor} />

@@ -32,7 +32,6 @@ export default function PlaybackSettingsScreen() {
   const insets = useSafeAreaInsets();
   const accentColor = useAccentColor();
   const borderColor = useThemeColor({}, 'surfaceBorder');
-  const mutedColor = useThemeColor({}, 'textMuted');
 
   const resumeBehavior = usePlaybackPreferences((s) => s.resumeBehavior);
   const setResumeBehavior = usePlaybackPreferences((s) => s.setResumeBehavior);
@@ -57,7 +56,7 @@ export default function PlaybackSettingsScreen() {
           <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
 
           <View style={styles.row}>
-            <Ionicons name="play-forward-outline" size={20} color={autoPlayNext ? accentColor : mutedColor} />
+            <Ionicons name="play-forward-outline" size={20} color={accentColor} />
             <ThemedText style={styles.rowLabel}>Autoplay next video</ThemedText>
             <View style={styles.rowSpacer} />
             <Switch

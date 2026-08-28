@@ -32,7 +32,6 @@ export default function SubtitleSettingsScreen() {
   const insets = useSafeAreaInsets();
   const accentColor = useAccentColor();
   const borderColor = useThemeColor({}, 'surfaceBorder');
-  const mutedColor = useThemeColor({}, 'textMuted');
 
   const subtitleFontSize = useSubtitleStylePreferences((s) => s.fontSize);
   const setSubtitleFontSize = useSubtitleStylePreferences((s) => s.setFontSize);
@@ -64,7 +63,7 @@ export default function SubtitleSettingsScreen() {
           <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
 
           <View style={styles.row}>
-            <Ionicons name="text-outline" size={20} color={subtitleBold ? accentColor : mutedColor} />
+            <Ionicons name="text-outline" size={20} color={accentColor} />
             <ThemedText style={styles.rowLabel}>Bold</ThemedText>
             <View style={styles.rowSpacer} />
             <Switch
@@ -78,7 +77,7 @@ export default function SubtitleSettingsScreen() {
           <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
 
           <Pressable style={styles.row} onPress={() => setSubtitleColorTarget('text')}>
-            <Ionicons name="color-palette-outline" size={20} color={mutedColor} />
+            <Ionicons name="color-palette-outline" size={20} color={accentColor} />
             <ThemedText style={styles.rowLabel}>Text color</ThemedText>
             <View style={styles.rowSpacer} />
             <View style={[styles.colorSwatch, { backgroundColor: subtitleTextColor, borderColor }]} />
@@ -87,7 +86,7 @@ export default function SubtitleSettingsScreen() {
           <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
 
           <Pressable style={styles.row} onPress={() => setSubtitleColorTarget('background')}>
-            <Ionicons name="square-outline" size={20} color={mutedColor} />
+            <Ionicons name="square-outline" size={20} color={accentColor} />
             <ThemedText style={styles.rowLabel}>Background color</ThemedText>
             <View style={styles.rowSpacer} />
             <View style={[styles.colorSwatch, { backgroundColor: subtitleBackgroundColor, borderColor }]} />

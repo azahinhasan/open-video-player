@@ -198,7 +198,15 @@ export function ControlsOverlay({
         style={[
           styles.bottomBar,
           bottomBarStyle,
-          { paddingBottom: insets.bottom + 14, paddingLeft: insets.left, paddingRight: insets.right },
+          {
+            // Landscape has much less vertical room than portrait, so the
+            // same flat +14 (tuned for portrait) reads as an oversized gap
+            // under the transport row there — cap how much of insets.bottom
+            // gets added on top of a smaller flat amount instead.
+            paddingBottom: isLandscape ? Math.min(insets.bottom, 8) + 4 : insets.bottom + 14,
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
+          },
         ]}
         pointerEvents="box-none">
         <SeekBar

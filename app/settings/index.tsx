@@ -7,6 +7,7 @@ import { Card } from '@/components/settings/Card';
 import { settingsStyles as styles } from '@/components/settings/settingsStyles';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAccentColor } from '@/hooks/useThemePreference';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { spacing } from '@/theme/tokens';
 
@@ -40,7 +41,7 @@ const GROUPS: SettingsGroup[] = [
     href: '/settings/library',
     icon: 'server-outline',
     title: 'Library & storage',
-    description: 'Auto-refresh, storage & cleanup',
+    description: 'Auto-refresh, scan folders, storage & cleanup',
   },
   {
     href: '/settings/vault-security',
@@ -53,6 +54,7 @@ const GROUPS: SettingsGroup[] = [
 export default function SettingsIndexScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const accentColor = useAccentColor();
   const mutedColor = useThemeColor({}, 'textMuted');
   const borderColor = useThemeColor({}, 'surfaceBorder');
 
@@ -65,7 +67,7 @@ export default function SettingsIndexScreen() {
           {GROUPS.map((group, index) => (
             <View key={group.href}>
               <Pressable style={styles.row} onPress={() => router.push(group.href)}>
-                <Ionicons name={group.icon} size={20} color={mutedColor} />
+                <Ionicons name={group.icon} size={20} color={accentColor} />
                 <View style={styles.rowSpacer}>
                   <ThemedText style={styles.rowLabel}>{group.title}</ThemedText>
                   <ThemedText style={[groupDescriptionStyle, { color: mutedColor }]} numberOfLines={1}>

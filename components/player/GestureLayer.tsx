@@ -2,10 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Brightness from 'expo-brightness';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -21,6 +22,11 @@ const COMMIT_INTERVAL_MS = 70;
 const HUD_HIDE_DELAY_MS = 1000;
 const DOUBLE_TAP_MAX_DELAY_MS = 250;
 const SEEK_PIXELS_PER_SECOND = 8;
+// How much finger-distance change is needed for a full fit<->fill swing —
+// 1 means the fingers need to double their starting distance apart (scale
+// reaching 2.0) to go from fully "fit" to fully "fill", or halve it (scale
+// 0.5) to go the other way. A deliberately large gesture, not a hair-trigger.
+const PINCH_ZOOM_SENSITIVITY = 1;
 
 type GestureLayerProps = {
   currentTime: number;
@@ -32,9 +38,26 @@ type GestureLayerProps = {
    * back through the native "volume changed" listener).
    */
   volumeLevel: SharedValue<number>;
-  onSeekBy: (deltaSeconds: number) => void;
+  /** Whether playback is currently paused — used only to pick which icon the double-tap flash shows (the state it's about to switch to). */
+  paused: boolean;
   onSeekTo: (time: number) => void;
   onToggleControls: () => void;
+  /** Fires on a double-tap anywhere in either zone — toggles play/pause. Deliberately not tied to which side was tapped: double-tap no longer seeks (swipe does that; see onSeekTo), so there's nothing left for left vs. right to distinguish. */
+  onTogglePlayPause: () => void;
+  /** Called the instant a seek-drag begins, so the controls bar (progress bar, transport buttons) is already on screen for the whole drag — not just revealed reactively once the drag ends and onSeekTo commits. */
+  onShowControls: () => void;
+  /**
+   * 0 (fit/letterboxed) to 1 (fill/cropped) — the pinch gesture below live-
+   * writes into this every frame while active, and VideoPlayer reads it to
+   * animate the video's container between those two shapes. Owned by the
+   * parent (not local state here) because VideoPlayer needs to both read it
+   * (to render) and write it (to stay in sync when the zoom mode changes
+   * some other way, e.g. the toolbar button) — same shared-SharedValue
+   * pattern as volumeLevel above.
+   */
+  zoomProgress: SharedValue<number>;
+  /** Fires once, when a pinch gesture ends and settles on an endpoint — lets the parent commit the corresponding real zoomMode ('contain' at 0, 'cover' at 1) so the toolbar's cycle button picks up from the right place afterward. */
+  onZoomSnap: (mode: 'contain' | 'cover') => void;
   /**
    * Height, in points, to leave uncovered at the bottom of the screen.
    * The SeekBar lives there and has its own GestureDetector — without
@@ -51,9 +74,13 @@ export function GestureLayer({
   currentTime,
   duration,
   volumeLevel,
-  onSeekBy,
+  paused,
   onSeekTo,
   onToggleControls,
+  onTogglePlayPause,
+  onShowControls,
+  zoomProgress,
+  onZoomSnap,
   bottomInset = 0,
 }: GestureLayerProps) {
   const { height } = useWindowDimensions();
@@ -61,8 +88,11 @@ export function GestureLayer({
   const brightnessLevel = useSharedValue(0.5);
   const brightnessOpacity = useSharedValue(0);
   const volumeOpacity = useSharedValue(0);
-  const leftFlashOpacity = useSharedValue(0);
-  const rightFlashOpacity = useSharedValue(0);
+  // One shared flash for the double-tap play/pause icon, rendered dead
+  // center of the whole screen (see the render below) — not per-zone,
+  // since double-tap does the same thing regardless of which side was
+  // tapped, so the feedback shouldn't appear off to one side either.
+  const playPauseFlashOpacity = useSharedValue(0);
   const seekOpacity = useSharedValue(0);
 
   const brightnessRef = useRef(0.5);
@@ -196,6 +226,7 @@ export function GestureLayer({
         seekStartRef.current = currentTimeRef.current;
         setSeekPreview({ targetSeconds: currentTimeRef.current, deltaSeconds: 0 });
         showHud(seekOpacity);
+        onShowControls();
       })
       .onUpdate((event) => {
         const { target, delta } = computeSeek(event.translationX);
@@ -221,8 +252,8 @@ export function GestureLayer({
       if (!success) {
         return;
       }
-      onSeekBy(-10);
-      flash(leftFlashOpacity);
+      onTogglePlayPause();
+      flash(playPauseFlashOpacity);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     });
 
@@ -234,8 +265,8 @@ export function GestureLayer({
       if (!success) {
         return;
       }
-      onSeekBy(10);
-      flash(rightFlashOpacity);
+      onTogglePlayPause();
+      flash(playPauseFlashOpacity);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     });
 
@@ -260,47 +291,90 @@ export function GestureLayer({
     Gesture.Exclusive(rightDoubleTap, singleTap)
   );
 
-  const leftFlashStyle = useAnimatedStyle(() => ({ opacity: leftFlashOpacity.value }));
-  const rightFlashStyle = useAnimatedStyle(() => ({ opacity: rightFlashOpacity.value }));
+  // Pinch requires two simultaneous touch points, which single-finger
+  // gestures (the pans/taps above) never reach — attached as its own
+  // top-level detector (see the wrapping GestureDetector below) rather than
+  // folded into leftZoneGesture/rightZoneGesture, both so it can span both
+  // zones at once (a pinch naturally has one finger in each) and so it
+  // can't disturb those already-tuned single-finger Race/Exclusive trees.
+  // simultaneousWithExternalGesture is required, not optional: nested
+  // GestureDetectors don't cooperate by default in RNGH — without this, the
+  // inner zone gestures silently claim the touches first and the pinch
+  // never gets a chance to activate at all.
+  const pinchStartProgress = useSharedValue(0);
+  const pinchGesture = Gesture.Pinch()
+    // leftZoneGesture/rightZoneGesture are ComposedGesture (Gesture.Race),
+    // which simultaneousWithExternalGesture doesn't accept directly —
+    // toGestureArray() flattens a composition down to its underlying raw
+    // gestures, which it does accept.
+    .simultaneousWithExternalGesture(
+      ...leftZoneGesture.toGestureArray(),
+      ...rightZoneGesture.toGestureArray(),
+    )
+    .onStart(() => {
+      pinchStartProgress.value = zoomProgress.value;
+    })
+    .onUpdate((event) => {
+      const next = pinchStartProgress.value + (event.scale - 1) / PINCH_ZOOM_SENSITIVITY;
+      zoomProgress.value = Math.min(1, Math.max(0, next));
+    })
+    .onEnd((_event, success) => {
+      if (!success) {
+        return;
+      }
+      const snapped = zoomProgress.value > 0.5 ? 1 : 0;
+      zoomProgress.value = withTiming(snapped, { duration: 220 });
+      runOnJS(onZoomSnap)(snapped === 1 ? 'cover' : 'contain');
+    });
+
+  const playPauseFlashStyle = useAnimatedStyle(() => ({ opacity: playPauseFlashOpacity.value }));
 
   return (
-    <View style={[styles.root, { bottom: bottomInset }]} pointerEvents="box-none">
-      <GestureDetector gesture={leftZoneGesture}>
-        <View style={styles.zone}>
-          <Animated.View style={[styles.flash, leftFlashStyle]} pointerEvents="none">
-            <Ionicons name="play-back" size={30} color="#fff" />
-            <Text style={styles.flashText}>10</Text>
-          </Animated.View>
-        </View>
-      </GestureDetector>
-      <GestureDetector gesture={rightZoneGesture}>
-        <View style={styles.zone}>
-          <Animated.View style={[styles.flash, rightFlashStyle]} pointerEvents="none">
-            <Ionicons name="play-forward" size={30} color="#fff" />
-            <Text style={styles.flashText}>10</Text>
-          </Animated.View>
-        </View>
-      </GestureDetector>
+    <GestureDetector gesture={pinchGesture}>
+      <View style={[styles.root, { bottom: bottomInset }]} pointerEvents="box-none">
+        <GestureDetector gesture={leftZoneGesture}>
+          <View style={styles.zone} />
+        </GestureDetector>
+        <GestureDetector gesture={rightZoneGesture}>
+          <View style={styles.zone} />
+        </GestureDetector>
 
-      <BrightnessVolumeHUD
-        side="left"
-        icon="sunny"
-        level={brightnessLevel}
-        opacity={brightnessOpacity}
-      />
-      <BrightnessVolumeHUD
-        side="right"
-        icon="volume-high"
-        zeroIcon="volume-mute"
-        level={volumeLevel}
-        opacity={volumeOpacity}
-      />
-      <SeekPreviewHUD
-        opacity={seekOpacity}
-        targetSeconds={seekPreview.targetSeconds}
-        deltaSeconds={seekPreview.deltaSeconds}
-      />
-    </View>
+        {/* Dead center of the true full screen regardless of which zone was
+            double-tapped, regardless of orientation, AND regardless of
+            whether the controls bar is showing — bottom: -bottomInset
+            deliberately reaches back past root's own bottom edge (root is
+            shortened by bottomInset above, to keep its touch zones off the
+            seek bar), so this doesn't end up centered in that shortened
+            box and sit visibly above true center whenever controls are
+            visible. */}
+        <Animated.View
+          style={[styles.centerFlash, { bottom: -bottomInset }, playPauseFlashStyle]}
+          pointerEvents="none">
+          <View style={styles.centerFlashIcon}>
+            <Ionicons name={paused ? 'play' : 'pause'} size={36} color="#fff" />
+          </View>
+        </Animated.View>
+
+        <BrightnessVolumeHUD
+          side="left"
+          icon="sunny"
+          level={brightnessLevel}
+          opacity={brightnessOpacity}
+        />
+        <BrightnessVolumeHUD
+          side="right"
+          icon="volume-high"
+          zeroIcon="volume-mute"
+          level={volumeLevel}
+          opacity={volumeOpacity}
+        />
+        <SeekPreviewHUD
+          opacity={seekOpacity}
+          targetSeconds={seekPreview.targetSeconds}
+          deltaSeconds={seekPreview.deltaSeconds}
+        />
+      </View>
+    </GestureDetector>
   );
 }
 
@@ -311,16 +385,22 @@ const styles = StyleSheet.create({
   },
   zone: {
     flex: 1,
+  },
+  centerFlash: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  flash: {
+  centerFlashIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
-    gap: 4,
-  },
-  flashText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
+    justifyContent: 'center',
   },
 });

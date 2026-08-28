@@ -162,6 +162,14 @@ export function PlayerScreen({
   const [rate, setRate] = useState(1);
   const [loop, setLoop] = useState(false);
   const [zoomMode, setZoomMode] = useState<VideoZoomMode>("contain");
+  // 0 (fit) to 1 (fill) — shared with GestureLayer (which live-writes to it
+  // during a pinch) and VideoPlayer (which reads it to animate the video's
+  // container, and also writes to it to stay in sync when zoomMode changes
+  // some other way, e.g. handleZoomSnap below or the toolbar cycle button).
+  const zoomProgress = useSharedValue(zoomMode === "cover" ? 1 : 0);
+  const handleZoomSnap = useCallback((mode: "contain" | "cover") => {
+    setZoomMode(mode);
+  }, []);
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
@@ -551,6 +559,17 @@ export function PlayerScreen({
     showControls,
   ]);
 
+  // Same as handleTogglePlayPause but deliberately skips showControls() —
+  // double-tapping the video to pause/resume (see GestureLayer) should stay
+  // immersive, not pop the title bar/progress bar open.
+  const handleDoubleTapTogglePlayPause = useCallback(() => {
+    const wasPlaying = !usePlaybackStore.getState().paused;
+    togglePlayPause();
+    if (wasPlaying && video) {
+      savePosition(video.id, currentTime, duration);
+    }
+  }, [togglePlayPause, video, currentTime, duration, savePosition]);
+
   const handleCycleZoomMode = useCallback(() => {
     setZoomMode(
       (prev) => ZOOM_CYCLE[(ZOOM_CYCLE.indexOf(prev) + 1) % ZOOM_CYCLE.length],
@@ -699,6 +718,7 @@ export function PlayerScreen({
             rate={rate}
             loop={loop}
             zoomMode={zoomMode}
+            zoomProgress={zoomProgress}
             // Already known from the library scan — lets VideoPlayer size
             // its "contain" letterbox box correctly from the very first
             // render instead of waiting on the player's own onLoad (see
@@ -756,15 +776,16 @@ export function PlayerScreen({
                 currentTime={displayTime}
                 duration={duration}
                 volumeLevel={volumeLevel}
-                onSeekBy={(delta) => {
-                  seekBy(delta);
-                  showControls();
-                }}
+                paused={paused}
+                onTogglePlayPause={handleDoubleTapTogglePlayPause}
                 onSeekTo={(time) => {
                   seekTo(time);
                   showControls();
                 }}
                 onToggleControls={toggleControls}
+                onShowControls={showControls}
+                zoomProgress={zoomProgress}
+                onZoomSnap={handleZoomSnap}
                 bottomInset={controlsVisible ? bottomControlsTouchHeight : 0}
               />
 

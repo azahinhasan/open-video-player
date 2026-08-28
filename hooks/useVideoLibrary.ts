@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo } from 'react';
+import { StorageAccessFramework } from 'expo-file-system/legacy';
 import * as MediaLibrary from 'expo-media-library';
 import { create } from 'zustand';
 
@@ -6,6 +7,7 @@ import type { VideoAsset, VideoFolder } from '@/types/video';
 import { useLibraryPreferences } from '@/hooks/useLibraryPreferences';
 import { readMediaCache, writeMediaCache } from '@/utils/mediaCache';
 import { dismissScanNotification, showScanNotification } from '@/utils/scanNotification';
+import { customFolderId, scanCustomFolder } from '@/utils/safVideoScan';
 
 export type LibraryStatus =
   | 'checking-permission'
@@ -19,12 +21,13 @@ const PAGE_SIZE = 500;
 const UNKNOWN_FOLDER_ID = 'unknown';
 const UNKNOWN_FOLDER_NAME = 'Videos';
 
-async function fetchAllVideoAssets(): Promise<MediaLibrary.Asset[]> {
+async function fetchVideoAssetsForAlbum(album?: string): Promise<MediaLibrary.Asset[]> {
   const assets: MediaLibrary.Asset[] = [];
   let after: string | undefined;
   for (;;) {
     const page = await MediaLibrary.getAssetsAsync({
       mediaType: 'video',
+      album,
       first: PAGE_SIZE,
       after,
       sortBy: [['modificationTime', false]],
@@ -36,6 +39,28 @@ async function fetchAllVideoAssets(): Promise<MediaLibrary.Asset[]> {
     after = page.endCursor;
   }
   return assets;
+}
+
+/**
+ * Empty/undefined albumIds scans the whole device (the original, still-default
+ * behavior) — otherwise this only scans the given albums (see the "Scan
+ * folders" setting). getAssetsAsync only takes one album per call, so
+ * multiple selected folders means one paginated fetch per album, merged and
+ * de-duplicated by id (a video could in principle be reachable through more
+ * than one album on some devices).
+ */
+async function fetchAllVideoAssets(albumIds?: string[]): Promise<MediaLibrary.Asset[]> {
+  if (!albumIds || albumIds.length === 0) {
+    return fetchVideoAssetsForAlbum(undefined);
+  }
+  const byId = new Map<string, MediaLibrary.Asset>();
+  for (const albumId of albumIds) {
+    const assets = await fetchVideoAssetsForAlbum(albumId);
+    for (const asset of assets) {
+      byId.set(asset.id, asset);
+    }
+  }
+  return Array.from(byId.values());
 }
 
 function buildVideos(assets: MediaLibrary.Asset[]): VideoAsset[] {
@@ -172,19 +197,28 @@ export const useVideoLibraryStore = create<VideoLibraryStoreState>((set, get) =>
     // doesn't need one too; this is for scans running without any other cue.
     const notificationId = silent ? await showScanNotification() : null;
     try {
-      const [assets, albums] = await Promise.all([
-        fetchAllVideoAssets(),
+      const { scanFolderIds, customScanFolders } = useLibraryPreferences.getState();
+      const [assets, albums, customVideoLists] = await Promise.all([
+        fetchAllVideoAssets(scanFolderIds),
         MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true }),
+        // Independent of expo-media-library entirely — each is a recursive
+        // walk of a user-picked SAF folder tree (see the "Scan folders"
+        // setting's "Add custom folder"), additive to whatever's selected
+        // (or the whole-device default) above, never a replacement for it.
+        Promise.all(customScanFolders.map(scanCustomFolder)),
       ]);
       const nextFolderNames: Record<string, string> = {};
       for (const album of albums) {
         nextFolderNames[album.id] = album.title;
       }
+      for (const folder of customScanFolders) {
+        nextFolderNames[customFolderId(folder.uri)] = folder.name;
+      }
 
       const thumbnailById = new Map(get().videos.map((v) => [v.id, v.thumbnailUri]));
-      const nextVideos = buildVideos(assets).map((video) => ({
+      const nextVideos = [...buildVideos(assets), ...customVideoLists.flat()].map((video) => ({
         ...video,
-        thumbnailUri: thumbnailById.get(video.id) ?? null,
+        thumbnailUri: thumbnailById.get(video.id) ?? video.thumbnailUri,
       }));
 
       writeMediaCache({ videos: nextVideos, folderNames: nextFolderNames });
@@ -210,13 +244,29 @@ export const useVideoLibraryStore = create<VideoLibraryStoreState>((set, get) =>
     if (ids.length === 0) {
       return true;
     }
+    // Custom-folder (SAF) videos use their own content:// document URI as
+    // their id (see utils/safVideoScan.ts) — expo-media-library never
+    // issues ids in that shape, so this is an unambiguous way to route each
+    // id to the API that can actually delete it.
+    const safIds = ids.filter((id) => id.startsWith('content://'));
+    const mediaLibraryIds = ids.filter((id) => !id.startsWith('content://'));
     try {
-      const deleted = await MediaLibrary.deleteAssetsAsync(ids);
-      if (!deleted) {
-        return false;
-      }
-      get().removeVideosFromState(ids);
-      return true;
+      const [safResults, mediaLibraryDeleted] = await Promise.all([
+        Promise.all(
+          safIds.map((uri) =>
+            StorageAccessFramework.deleteAsync(uri)
+              .then(() => true)
+              .catch(() => false)
+          )
+        ),
+        mediaLibraryIds.length > 0 ? MediaLibrary.deleteAssetsAsync(mediaLibraryIds) : true,
+      ]);
+      const deletedIds = [
+        ...safIds.filter((_, index) => safResults[index]),
+        ...(mediaLibraryDeleted ? mediaLibraryIds : []),
+      ];
+      get().removeVideosFromState(deletedIds);
+      return deletedIds.length === ids.length;
     } catch {
       return false;
     }

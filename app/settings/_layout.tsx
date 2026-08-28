@@ -8,6 +8,7 @@ export default function SettingsLayout() {
       <Stack.Screen name="subtitles" options={{ title: 'Subtitles' }} />
       <Stack.Screen name="appearance" options={{ title: 'Appearance' }} />
       <Stack.Screen name="library" options={{ title: 'Library & storage' }} />
+      <Stack.Screen name="scan-folders" options={{ title: 'Scan folders' }} />
       <Stack.Screen name="vault-security" options={{ title: 'Vault security' }} />
     </Stack>
   );

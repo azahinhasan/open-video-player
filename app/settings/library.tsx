@@ -21,6 +21,7 @@ export default function LibrarySettingsScreen() {
 
   const autoRefreshOnLaunch = useLibraryPreferences((s) => s.autoRefreshOnLaunch);
   const setAutoRefreshOnLaunch = useLibraryPreferences((s) => s.setAutoRefreshOnLaunch);
+  const scanFolderIds = useLibraryPreferences((s) => s.scanFolderIds);
 
   return (
     <ThemedView style={styles.container}>
@@ -29,7 +30,7 @@ export default function LibrarySettingsScreen() {
         showsVerticalScrollIndicator={false}>
         <Card>
           <View style={styles.row}>
-            <Ionicons name="refresh-outline" size={20} color={autoRefreshOnLaunch ? accentColor : mutedColor} />
+            <Ionicons name="refresh-outline" size={20} color={accentColor} />
             <ThemedText style={styles.rowLabel}>Auto-refresh on launch</ThemedText>
             <View style={styles.rowSpacer} />
             <Switch
@@ -42,8 +43,23 @@ export default function LibrarySettingsScreen() {
 
           <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
 
+          <Pressable style={styles.row} onPress={() => router.push('/settings/scan-folders')}>
+            <Ionicons name="folder-outline" size={20} color={accentColor} />
+            <View style={styles.rowSpacer}>
+              <ThemedText style={styles.rowLabel}>Scan folders</ThemedText>
+              <ThemedText style={[localHintStyle, { color: mutedColor }]}>
+                {scanFolderIds.length === 0
+                  ? 'Whole device'
+                  : `${scanFolderIds.length} folder${scanFolderIds.length === 1 ? '' : 's'} selected`}
+              </ThemedText>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={mutedColor} />
+          </Pressable>
+
+          <View style={[styles.rowDivider, { backgroundColor: borderColor }]} />
+
           <Pressable style={styles.row} onPress={() => router.push('/storage-cleanup')}>
-            <Ionicons name="server-outline" size={20} color={mutedColor} />
+            <Ionicons name="server-outline" size={20} color={accentColor} />
             <ThemedText style={styles.rowLabel}>Storage & cleanup</ThemedText>
             <View style={styles.rowSpacer} />
             <Ionicons name="chevron-forward" size={18} color={mutedColor} />
@@ -53,3 +69,5 @@ export default function LibrarySettingsScreen() {
     </ThemedView>
   );
 }
+
+const localHintStyle = { fontSize: 12, marginTop: 2 };

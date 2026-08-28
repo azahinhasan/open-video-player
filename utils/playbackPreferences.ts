@@ -20,7 +20,7 @@ export type PlaybackPreferences = {
 const DEFAULT_PREFERENCES: PlaybackPreferences = {
   resumeBehavior: 'resume',
   autoPlayNext: true,
-  controlsLayout: 'center',
+  controlsLayout: 'bottom',
   defaultOrientation: 'portrait',
 };
 
@@ -38,7 +38,10 @@ export function readPlaybackPreferences(): PlaybackPreferences {
     return {
       resumeBehavior: parsed?.resumeBehavior === 'restart' ? 'restart' : 'resume',
       autoPlayNext: typeof parsed?.autoPlayNext === 'boolean' ? parsed.autoPlayNext : true,
-      controlsLayout: parsed?.controlsLayout === 'bottom' ? 'bottom' : 'center',
+      controlsLayout:
+        parsed?.controlsLayout === 'bottom' || parsed?.controlsLayout === 'center'
+          ? parsed.controlsLayout
+          : DEFAULT_PREFERENCES.controlsLayout,
       defaultOrientation: parsed?.defaultOrientation === 'landscape' ? 'landscape' : 'portrait',
     };
   } catch {

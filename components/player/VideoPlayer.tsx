@@ -2,11 +2,15 @@ import {
   forwardRef,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
 import { Image, StyleSheet, View, useWindowDimensions } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  withTiming,
+  type SharedValue,
+} from "react-native-reanimated";
 import Video, {
   BufferConfig,
   OnAudioTracksData,
@@ -86,6 +90,14 @@ type VideoPlayerProps = {
   loop?: boolean;
   zoomMode?: VideoZoomMode;
   /**
+   * 0 (fit/letterboxed) to 1 (fill/cropped) — drives the container's
+   * animated size between the "contain" and "cover" shapes, live during a
+   * pinch gesture (see GestureLayer) and smoothly on any other zoomMode
+   * change too (see the sync effect below). Owned by PlayerScreen and
+   * shared with GestureLayer, which writes to it directly during a pinch.
+   */
+  zoomProgress: SharedValue<number>;
+  /**
    * The video's real dimensions, already known from VideoAsset (captured
    * during the library scan) — pass video.width/video.height here whenever
    * available. Used to size the "contain" letterbox box correctly on the
@@ -161,6 +173,7 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
       rate = 1,
       loop = false,
       zoomMode = "contain",
+      zoomProgress,
       initialNaturalSize = null,
       selectedAudioTrackIndex,
       posterUri,
@@ -280,18 +293,18 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
         return;
       }
       readyForDisplayFiredRef.current = true;
-      // For "contain" with naturalSize already known (the common case now,
-      // via initialNaturalSize), the container is already sized to the
-      // exact correct aspect ratio from the very first render — resizeMode
+      // For "contain"/"cover" with naturalSize already known (the common
+      // case now, via initialNaturalSize), the container is already sized
+      // to the exact correct shape from the very first render — resizeMode
       // COVER on an already-correctly-shaped box is an exact fill, nothing
       // left to transform, so it's safe to reveal on the very next frame.
       // Every other case (no initialNaturalSize and onLoad hasn't reported
-      // one yet, or "cover"/"stretch" zoom modes) falls back to a short
-      // fixed buffer, same as before.
-      const isPreSizedContain = zoomMode === "contain" && naturalSize !== null;
+      // one yet, or "stretch") falls back to a short fixed buffer, same as
+      // before.
+      const isPreSizedBox = zoomMode !== "stretch" && naturalSize !== null;
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          if (isPreSizedContain) {
+          if (isPreSizedBox) {
             markPictureReady();
           } else {
             revealTimerRef.current = setTimeout(
@@ -303,49 +316,67 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
       });
     }, [markPictureReady, zoomMode, naturalSize]);
 
-    // The letterboxed box for "contain": computed from the real video
-    // dimensions against the actual screen size. When naturalSize is
-    // already known on the first render (the common case now), this is
-    // correct immediately and the container never resizes after mount.
-    const containerStyle = useMemo(() => {
-      if (
-        zoomMode !== "contain" ||
-        !naturalSize ||
-        !screenWidth ||
-        !screenHeight
-      ) {
+    // Keeps zoomProgress in sync whenever zoomMode changes some way other
+    // than the pinch gesture itself (the toolbar's cycle button, or a fresh
+    // mount) — animated so that path also transitions smoothly rather than
+    // snapping instantly, not just the live pinch-driven case. A pinch
+    // ending on the matching value makes this a harmless no-op redundant
+    // animation-to-the-same-value, not a conflicting second transition.
+    useEffect(() => {
+      if (zoomMode === "cover") {
+        zoomProgress.value = withTiming(1, { duration: 250 });
+      } else if (zoomMode === "contain") {
+        zoomProgress.value = withTiming(0, { duration: 250 });
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [zoomMode]);
+
+    // The video's container: interpolated between the "contain" letterbox
+    // box (progress 0) and full-screen (progress 1, same shape "cover"
+    // already rendered as before) using the real video dimensions against
+    // the actual screen size. When naturalSize is already known on the
+    // first render (the common case now), progress 0 is correct
+    // immediately and the container never resizes after mount on its own —
+    // it only ever moves via zoomProgress, live during a pinch or animated
+    // on a mode change (see above).
+    const containerStyle = useAnimatedStyle(() => {
+      if (zoomMode === "stretch" || !naturalSize || !screenWidth || !screenHeight) {
         return StyleSheet.absoluteFillObject;
       }
       const videoAspect = naturalSize.width / naturalSize.height;
       const screenAspect = screenWidth / screenHeight;
-      const boxWidth =
+      const fitWidth =
         videoAspect > screenAspect ? screenWidth : screenHeight * videoAspect;
-      const boxHeight =
+      const fitHeight =
         videoAspect > screenAspect ? screenWidth / videoAspect : screenHeight;
+      const progress = zoomProgress.value;
+      const width = fitWidth + (screenWidth - fitWidth) * progress;
+      const height = fitHeight + (screenHeight - fitHeight) * progress;
       return {
         position: "absolute" as const,
-        width: boxWidth,
-        height: boxHeight,
-        left: (screenWidth - boxWidth) / 2,
-        top: (screenHeight - boxHeight) / 2,
+        width,
+        height,
+        left: (screenWidth - width) / 2,
+        top: (screenHeight - height) / 2,
       };
     }, [zoomMode, naturalSize, screenWidth, screenHeight]);
 
     // Once the container above is already the correctly-shaped box, the
     // video just needs to fill it exactly — COVER does that with no
-    // cropping (the box's aspect ratio already matches the video's), and
-    // critically involves no letterbox transform for native to compute
-    // asynchronously. For every other case (naturalSize not yet known, or
-    // "cover"/"stretch" zoom modes), fall back to the real resizeMode as
-    // before.
+    // cropping (the box's aspect ratio already matches whatever the
+    // container's current interpolated shape is), and critically involves
+    // no letterbox transform for native to compute asynchronously at any
+    // point during a live pinch. Only "stretch" (which isn't part of the
+    // pinch/contain/cover interpolation at all) or naturalSize not yet
+    // being known falls back to the real resizeMode.
     const effectiveResizeMode =
-      zoomMode === "contain" && naturalSize
+      zoomMode !== "stretch" && naturalSize
         ? ResizeMode.COVER
         : ZOOM_MODE_TO_RESIZE_MODE[zoomMode];
 
     return (
       <View style={styles.blackBackdrop}>
-        <View style={containerStyle}>
+        <Animated.View style={containerStyle}>
           <Video
             ref={ref}
             // paused/muted are deliberately declared before source: this
@@ -406,7 +437,7 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
             playInBackground={false}
             playWhenInactive={false}
           />
-        </View>
+        </Animated.View>
         {coverVisible ? (
           posterUri ? (
             <Image

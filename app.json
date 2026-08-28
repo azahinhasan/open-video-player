@@ -2,7 +2,7 @@
   "expo": {
     "name": "Open Video Player",
     "slug": "video-player-app",
-    "version": "0.0.7",
+    "version": "0.0.8",
     "orientation": "portrait",
     "icon": "./assets/images/icon-tomato-final-1024.png",
     "scheme": "videoplayerappmobile",
@@ -11,7 +11,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0B0C0E",
-        "foregroundImage": "./assets/images/adaptive-icon-tomato-foreground.png"
+        "foregroundImage": "./assets/images/icon-tomato-final-1024.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,

@@ -1,5 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { AudioTrack } from 'react-native-video';
 
 import { useAccentColor } from '@/hooks/useThemePreference';
@@ -57,15 +57,23 @@ export function MoreOptionsMenu({
   leftOffset,
 }: MoreOptionsMenuProps) {
   const accentColor = useAccentColor();
+  const { height: windowHeight } = useWindowDimensions();
 
   if (!visible) {
     return null;
   }
 
+  // No `bottom` here deliberately — setting both top and bottom stretches
+  // the panel to fill that whole span regardless of content (that was the
+  // "always full height" bug). Height now follows content, capped by
+  // maxHeight so a long list still can't run off-screen — the ScrollView
+  // below takes over once content actually exceeds that.
+  const maxHeight = Math.max(0, windowHeight - topOffset - bottomOffset);
+
   return (
     <>
       <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.panel, { top: topOffset, right: rightOffset, bottom: bottomOffset, left: leftOffset }]}>
+      <View style={[styles.panel, { top: topOffset, right: rightOffset, left: leftOffset, maxHeight }]}>
       <ScrollView contentContainerStyle={styles.panelContent} showsVerticalScrollIndicator>
         <Text style={styles.sectionLabel}>Speed</Text>
         <View style={styles.speedRow}>

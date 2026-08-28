@@ -55,7 +55,12 @@ export default function LibraryScreen() {
 
   const handleOpenFolder = useCallback(
     (folder: VideoFolder) => {
-      router.push(`/folder/${folder.id}`);
+      // encodeURIComponent is required, not cosmetic, now that folder ids
+      // can be a custom scan folder's content:// URI (see
+      // utils/safVideoScan.ts) — those contain literal "/" and ":"
+      // characters that would otherwise split across multiple path
+      // segments instead of matching folder/[id] as a single one.
+      router.push(`/folder/${encodeURIComponent(folder.id)}`);
     },
     [router],
   );
