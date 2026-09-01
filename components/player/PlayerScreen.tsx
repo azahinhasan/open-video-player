@@ -54,7 +54,7 @@ import {
   loadSubtitleCues,
 } from "@/utils/subtitles";
 
-const AUTO_HIDE_DELAY_MS = 3000;
+const AUTO_HIDE_DELAY_MS = 2000;
 const ZOOM_CYCLE: VideoZoomMode[] = ["contain", "cover", "stretch"];
 const ZOOM_MODE_LABELS: Record<VideoZoomMode, string> = {
   contain: "Fit",
@@ -330,7 +330,26 @@ export function PlayerScreen({
 
   useKeepAwake();
   useOrientationLock(orientationLock);
-  useImmersiveMode(!controlsVisible);
+
+  // Hiding the system status/nav bars in lockstep with controlsVisible
+  // shrinks insets.top/insets.bottom the instant they start hiding — and
+  // ControlsOverlay's top/bottom bar padding is computed live from those
+  // insets, so the bar's own height visibly collapses WHILE it's still
+  // fading out (a separate, ~220ms opacity animation — see
+  // ControlsOverlay's withTiming), instead of just fading in place.
+  // Delaying the system-bar hide until just after that fade finishes means
+  // the padding/height only actually changes once the bar is already
+  // invisible. Showing them again stays immediate — only hiding needs this.
+  const [systemBarsHidden, setSystemBarsHidden] = useState(false);
+  useEffect(() => {
+    if (!controlsVisible) {
+      const timer = setTimeout(() => setSystemBarsHidden(true), 220);
+      return () => clearTimeout(timer);
+    }
+    setSystemBarsHidden(false);
+  }, [controlsVisible]);
+
+  useImmersiveMode(systemBarsHidden);
 
   // Android's STRETCH resize mode (ExoPlayer's RESIZE_MODE_FILL) has been
   // reported to leave the video rendered at its pre-rotation size in the
@@ -756,7 +775,7 @@ export function PlayerScreen({
 
   return (
     <View style={styles.container}>
-      <StatusBar hidden={!controlsVisible} animated />
+      <StatusBar hidden={systemBarsHidden} animated />
       {errorMessage ? (
         <View style={styles.center}>
           <Text style={styles.errorText}>{errorMessage}</Text>
@@ -815,7 +834,10 @@ export function PlayerScreen({
           />
 
           {pipActive ? null : (
-            <ZoomModeHUD opacity={zoomFlashOpacity} label={ZOOM_MODE_LABELS[zoomMode]} />
+            <ZoomModeHUD
+              opacity={zoomFlashOpacity}
+              label={ZOOM_MODE_LABELS[zoomMode]}
+            />
           )}
 
           {pipActive ? null : (

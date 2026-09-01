@@ -1,9 +1,9 @@
-import { Ionicons } from '@expo/vector-icons';
-import * as Brightness from 'expo-brightness';
-import * as Haptics from 'expo-haptics';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Ionicons } from "@expo/vector-icons";
+import * as Brightness from "expo-brightness";
+import * as Haptics from "expo-haptics";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   cancelAnimation,
   runOnJS,
@@ -12,11 +12,11 @@ import Animated, {
   withDelay,
   withTiming,
   type SharedValue,
-} from 'react-native-reanimated';
-import { VolumeManager } from 'react-native-volume-manager';
+} from "react-native-reanimated";
+import { VolumeManager } from "react-native-volume-manager";
 
-import { BrightnessVolumeHUD } from '@/components/player/BrightnessVolumeHUD';
-import { SeekPreviewHUD } from '@/components/player/SeekPreviewHUD';
+import { BrightnessVolumeHUD } from "@/components/player/BrightnessVolumeHUD";
+import { SeekPreviewHUD } from "@/components/player/SeekPreviewHUD";
 
 const COMMIT_INTERVAL_MS = 70;
 const HUD_HIDE_DELAY_MS = 1000;
@@ -57,7 +57,7 @@ type GestureLayerProps = {
    */
   zoomProgress: SharedValue<number>;
   /** Fires once, when a pinch gesture ends and settles on an endpoint — lets the parent commit the corresponding real zoomMode ('contain' at 0, 'cover' at 1) so the toolbar's cycle button picks up from the right place afterward. */
-  onZoomSnap: (mode: 'contain' | 'cover') => void;
+  onZoomSnap: (mode: "contain" | "cover") => void;
   /**
    * Height, in points, to leave uncovered at the bottom of the screen.
    * The SeekBar lives there and has its own GestureDetector — without
@@ -104,7 +104,10 @@ export function GestureLayer({
   const currentTimeRef = useRef(currentTime);
   const durationRef = useRef(duration);
   const seekStartRef = useRef(0);
-  const [seekPreview, setSeekPreview] = useState({ targetSeconds: 0, deltaSeconds: 0 });
+  const [seekPreview, setSeekPreview] = useState({
+    targetSeconds: 0,
+    deltaSeconds: 0,
+  });
 
   useEffect(() => {
     currentTimeRef.current = currentTime;
@@ -135,7 +138,10 @@ export function GestureLayer({
 
   const hideHudDelayed = useCallback((opacity: SharedValue<number>) => {
     cancelAnimation(opacity);
-    opacity.value = withDelay(HUD_HIDE_DELAY_MS, withTiming(0, { duration: 250 }));
+    opacity.value = withDelay(
+      HUD_HIDE_DELAY_MS,
+      withTiming(0, { duration: 250 }),
+    );
   }, []);
 
   const flash = useCallback((opacity: SharedValue<number>) => {
@@ -162,7 +168,9 @@ export function GestureLayer({
       return;
     }
     lastVolumeCommitRef.current = now;
-    VolumeManager.setVolume(value, { showUI: false, playSound: false }).catch(() => {});
+    VolumeManager.setVolume(value, { showUI: false, playSound: false }).catch(
+      () => {},
+    );
   }, []);
 
   const computeSeek = useCallback((translationX: number) => {
@@ -224,7 +232,10 @@ export function GestureLayer({
       .failOffsetY([-24, 24])
       .onStart(() => {
         seekStartRef.current = currentTimeRef.current;
-        setSeekPreview({ targetSeconds: currentTimeRef.current, deltaSeconds: 0 });
+        setSeekPreview({
+          targetSeconds: currentTimeRef.current,
+          deltaSeconds: 0,
+        });
         showHud(seekOpacity);
         onShowControls();
       })
@@ -283,12 +294,12 @@ export function GestureLayer({
   const leftZoneGesture = Gesture.Race(
     brightnessPan,
     leftSeekPan,
-    Gesture.Exclusive(leftDoubleTap, singleTap)
+    Gesture.Exclusive(leftDoubleTap, singleTap),
   );
   const rightZoneGesture = Gesture.Race(
     volumePan,
     rightSeekPan,
-    Gesture.Exclusive(rightDoubleTap, singleTap)
+    Gesture.Exclusive(rightDoubleTap, singleTap),
   );
 
   // Pinch requires two simultaneous touch points, which single-finger
@@ -315,7 +326,8 @@ export function GestureLayer({
       pinchStartProgress.value = zoomProgress.value;
     })
     .onUpdate((event) => {
-      const next = pinchStartProgress.value + (event.scale - 1) / PINCH_ZOOM_SENSITIVITY;
+      const next =
+        pinchStartProgress.value + (event.scale - 1) / PINCH_ZOOM_SENSITIVITY;
       zoomProgress.value = Math.min(1, Math.max(0, next));
     })
     .onEnd((_event, success) => {
@@ -324,14 +336,19 @@ export function GestureLayer({
       }
       const snapped = zoomProgress.value > 0.5 ? 1 : 0;
       zoomProgress.value = withTiming(snapped, { duration: 220 });
-      runOnJS(onZoomSnap)(snapped === 1 ? 'cover' : 'contain');
+      runOnJS(onZoomSnap)(snapped === 1 ? "cover" : "contain");
     });
 
-  const playPauseFlashStyle = useAnimatedStyle(() => ({ opacity: playPauseFlashOpacity.value }));
+  const playPauseFlashStyle = useAnimatedStyle(() => ({
+    opacity: playPauseFlashOpacity.value,
+  }));
 
   return (
     <GestureDetector gesture={pinchGesture}>
-      <View style={[styles.root, { bottom: bottomInset }]} pointerEvents="box-none">
+      <View
+        style={[styles.root, { bottom: bottomInset }]}
+        pointerEvents="box-none"
+      >
         <GestureDetector gesture={leftZoneGesture}>
           <View style={styles.zone} />
         </GestureDetector>
@@ -348,10 +365,15 @@ export function GestureLayer({
             box and sit visibly above true center whenever controls are
             visible. */}
         <Animated.View
-          style={[styles.centerFlash, { bottom: -bottomInset }, playPauseFlashStyle]}
-          pointerEvents="none">
+          style={[
+            styles.centerFlash,
+            { bottom: -bottomInset },
+            playPauseFlashStyle,
+          ]}
+          pointerEvents="none"
+        >
           <View style={styles.centerFlashIcon}>
-            <Ionicons name={paused ? 'play' : 'pause'} size={36} color="#fff" />
+            <Ionicons name={paused ? "play" : "pause"} size={36} color="#fff" />
           </View>
         </Animated.View>
 
@@ -384,7 +406,7 @@ export function GestureLayer({
 const styles = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
+    flexDirection: "row",
   },
   zone: {
     flex: 1,
@@ -392,19 +414,19 @@ const styles = StyleSheet.create({
   centerFlash: {
     // bottom is applied inline (see the render above) — it depends on the
     // runtime bottomInset prop, not a fixed value.
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   centerFlashIcon: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

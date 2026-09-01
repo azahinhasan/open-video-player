@@ -1,21 +1,21 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useEffect, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
   type SharedValue,
-} from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { AudioTrack } from 'react-native-video';
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { AudioTrack } from "react-native-video";
 
-import { MoreOptionsMenu } from '@/components/player/MoreOptionsMenu';
-import { SeekBar } from '@/components/player/SeekBar';
-import { MuteButton } from '@/components/player/MuteButton';
-import { usePlaybackPreferences } from '@/hooks/usePlaybackPreferences';
-import { useAccentColor } from '@/hooks/useThemePreference';
-import { formatTime } from '@/utils/formatTime';
+import { MoreOptionsMenu } from "@/components/player/MoreOptionsMenu";
+import { MuteButton } from "@/components/player/MuteButton";
+import { SeekBar } from "@/components/player/SeekBar";
+import { usePlaybackPreferences } from "@/hooks/usePlaybackPreferences";
+import { useAccentColor } from "@/hooks/useThemePreference";
+import { formatTime } from "@/utils/formatTime";
 
 type ControlsOverlayProps = {
   visible: boolean;
@@ -142,23 +142,50 @@ export function ControlsOverlay({
 
   const transportControls = (
     <>
-      <Pressable style={styles.iconButton} onPress={onPrevious} disabled={!hasPrevious} hitSlop={12}>
-        <Ionicons name="play-skip-back" size={26} color={hasPrevious ? '#fff' : '#555'} />
+      <Pressable
+        style={styles.iconButton}
+        onPress={onPrevious}
+        disabled={!hasPrevious}
+        hitSlop={12}
+      >
+        <Ionicons
+          name="play-skip-back"
+          size={26}
+          color={hasPrevious ? "#fff" : "#555"}
+        />
       </Pressable>
-      <Pressable style={styles.iconButton} onPress={() => onSeekBy(-10)} hitSlop={12}>
+      <Pressable
+        style={styles.iconButton}
+        onPress={() => onSeekBy(-10)}
+        hitSlop={12}
+      >
         <Ionicons name="play-back" size={26} color="#fff" />
       </Pressable>
       <Pressable
         style={[styles.playButton, { backgroundColor: accentColor }]}
         onPress={onTogglePlayPause}
-        hitSlop={12}>
-        <Ionicons name={paused ? 'play' : 'pause'} size={30} color="#fff" />
+        hitSlop={12}
+      >
+        <Ionicons name={paused ? "play" : "pause"} size={30} color="#fff" />
       </Pressable>
-      <Pressable style={styles.iconButton} onPress={() => onSeekBy(10)} hitSlop={12}>
+      <Pressable
+        style={styles.iconButton}
+        onPress={() => onSeekBy(10)}
+        hitSlop={12}
+      >
         <Ionicons name="play-forward" size={26} color="#fff" />
       </Pressable>
-      <Pressable style={styles.iconButton} onPress={onNext} disabled={!hasNext} hitSlop={12}>
-        <Ionicons name="play-skip-forward" size={26} color={hasNext ? '#fff' : '#555'} />
+      <Pressable
+        style={styles.iconButton}
+        onPress={onNext}
+        disabled={!hasNext}
+        hitSlop={12}
+      >
+        <Ionicons
+          name="play-skip-forward"
+          size={26}
+          color={hasNext ? "#fff" : "#555"}
+        />
       </Pressable>
     </>
   );
@@ -166,7 +193,8 @@ export function ControlsOverlay({
   return (
     <Animated.View
       style={[styles.fill, containerStyle]}
-      pointerEvents={visible ? 'box-none' : 'none'}>
+      pointerEvents={visible ? "box-none" : "none"}
+    >
       <Animated.View
         style={[
           styles.topBar,
@@ -176,12 +204,24 @@ export function ControlsOverlay({
           // group even when insets.left and insets.right differ (a
           // landscape-side notch/cutout), rather than shifting it toward
           // whichever side has less inset.
+          //
+          // paddingTop: landscape has much less vertical room than portrait
+          // (same reasoning as bottomBar's paddingBottom above), so the
+          // extra +6 cosmetic buffer is dropped there — but insets.top
+          // itself is always added in full, never capped/reduced. A
+          // previous version of this used Math.min(insets.top, N), which
+          // could cap the total BELOW the real status bar height and
+          // render the back/title/menu row partly underneath it — where
+          // the system status bar itself intercepts touches before they
+          // reach the app, making the three-dot menu (and back button)
+          // untappable. insets.top must always be respected in full.
           {
-            paddingTop: insets.top + 6,
+            paddingTop: isLandscape ? Math.min(insets.top, 20) : insets.top + 6,
             paddingHorizontal: Math.max(insets.left, insets.right) + 12,
           },
         ]}
-        pointerEvents="box-none">
+        pointerEvents="box-none"
+      >
         <Pressable style={styles.iconButton} onPress={onBack} hitSlop={12}>
           <Ionicons name="chevron-back" size={26} color="#fff" />
         </Pressable>
@@ -191,12 +231,13 @@ export function ControlsOverlay({
         <Pressable
           style={styles.iconButton}
           onPress={() => (menuOpen ? closeMenu() : openMenu())}
-          hitSlop={12}>
+          hitSlop={12}
+        >
           <Ionicons name="ellipsis-vertical" size={20} color="#fff" />
         </Pressable>
       </Animated.View>
 
-      {controlsLayout === 'center' ? (
+      {controlsLayout === "center" ? (
         <View style={styles.centerRow} pointerEvents="box-none">
           {transportControls}
         </View>
@@ -208,10 +249,15 @@ export function ControlsOverlay({
           bottomBarStyle,
           {
             // Landscape has much less vertical room than portrait, so the
-            // same flat +14 (tuned for portrait) reads as an oversized gap
-            // under the transport row there — cap how much of insets.bottom
-            // gets added on top of a smaller flat amount instead.
-            paddingBottom: isLandscape ? Math.min(insets.bottom, 8) + 4 : insets.bottom + 14,
+            // extra +14 cosmetic buffer is reduced to +4 there — but
+            // insets.bottom itself is always added in full, never
+            // capped/reduced (see topBar's paddingTop above for why: an
+            // earlier Math.min(insets.bottom, N)-based version of this
+            // could cap the total BELOW the real nav bar height, rendering
+            // the seek bar/transport buttons partly underneath it, where
+            // the system nav bar intercepts touches before they reach the
+            // app).
+            paddingBottom: insets.bottom + (isLandscape ? 4 : 14),
             // Symmetric, not insets.left/insets.right individually — on a
             // device with a landscape-side notch/cutout, those two differ,
             // and padding each side by its own inset shifts the seek bar/
@@ -222,7 +268,8 @@ export function ControlsOverlay({
             paddingHorizontal: Math.max(insets.left, insets.right),
           },
         ]}
-        pointerEvents="box-none">
+        pointerEvents="box-none"
+      >
         <SeekBar
           videoUri={videoUri}
           videoId={videoId}
@@ -233,7 +280,7 @@ export function ControlsOverlay({
           onScrubStart={onScrubStart}
           onScrubEnd={onScrubEnd}
         />
-        {controlsLayout === 'bottom' ? (
+        {controlsLayout === "bottom" ? (
           <View style={styles.bottomTransportRow} pointerEvents="box-none">
             {transportControls}
           </View>
@@ -243,17 +290,32 @@ export function ControlsOverlay({
             {formatTime(currentTime)} / {formatTime(duration)}
           </Text>
           <View style={styles.timeSpacer} />
-          <Pressable style={styles.orientationButton} onPress={onCycleZoomMode} hitSlop={12}>
+          <Pressable
+            style={styles.orientationButton}
+            onPress={onCycleZoomMode}
+            hitSlop={12}
+          >
             <Ionicons name="scan-outline" size={20} color="#fff" />
           </Pressable>
-          <Pressable style={styles.orientationButton} onPress={onToggleOrientation} hitSlop={12}>
+          <Pressable
+            style={styles.orientationButton}
+            onPress={onToggleOrientation}
+            hitSlop={12}
+          >
             <MaterialCommunityIcons
-              name={isLandscape ? 'phone-rotate-portrait' : 'phone-rotate-landscape'}
+              name={
+                isLandscape ? "phone-rotate-portrait" : "phone-rotate-landscape"
+              }
               size={20}
               color="#fff"
             />
           </Pressable>
-          <MuteButton volumeLevel={volumeLevel} onSetVolume={onSetVolume} size={20} color="#fff" />
+          <MuteButton
+            volumeLevel={volumeLevel}
+            onSetVolume={onSetVolume}
+            size={20}
+            color="#fff"
+          />
         </View>
       </Animated.View>
 
@@ -290,32 +352,32 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   topBar: {
-    position: 'absolute',
-    top: 0,
+    position: "absolute",
+    top: 9,
     left: 0,
     right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingVertical: 3,
+    backgroundColor: "rgba(0, 0, 0, 0.07)",
   },
   title: {
     flex: 1,
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
   centerRow: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     right: 0,
-    top: '50%',
+    top: "50%",
     marginTop: -34,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
   iconButton: {
     padding: 8,
@@ -326,30 +388,31 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   bottomTransportRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+    marginBottom: -10,
   },
   bottomBar: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     right: 0,
-    bottom: 0,
-    paddingBottom: 14,
-    paddingTop: 14,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    bottom: -5,
+    paddingTop: 6,
+    backgroundColor: "rgba(0, 0, 0, 0.07)",
   },
   timeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     paddingHorizontal: 16,
-    marginTop: 6,
+    marginTop: 0,
   },
   timeText: {
-    color: '#fff',
-    fontSize: 12,
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "500",
   },
   timeSpacer: {
     flex: 1,

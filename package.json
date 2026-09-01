@@ -1,7 +1,7 @@
 {
   "name": "video-player-app-mobile",
   "main": "expo-router/entry",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "scripts": {
     "postinstall": "patch-package",
     "start": "expo start",
