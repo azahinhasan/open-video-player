@@ -15,9 +15,26 @@ type BrightnessVolumeHUDProps = {
   zeroIcon?: keyof typeof Ionicons.glyphMap;
   level: SharedValue<number>;
   opacity: SharedValue<number>;
+  /**
+   * Same fix as GestureLayer's own center flash: this HUD lives inside
+   * GestureLayer's root, whose bottom edge is pulled up by bottomInset
+   * while the controls bar is showing (to keep its touch zones off the
+   * seek bar) — centering naively within that shortened box would put the
+   * HUD visibly above true screen-center whenever controls are visible.
+   * Reaching back past root's own bottom edge by this amount keeps it
+   * centered on the real screen regardless.
+   */
+  bottomInset?: number;
 };
 
-export function BrightnessVolumeHUD({ side, icon, zeroIcon, level, opacity }: BrightnessVolumeHUDProps) {
+export function BrightnessVolumeHUD({
+  side,
+  icon,
+  zeroIcon,
+  level,
+  opacity,
+  bottomInset = 0,
+}: BrightnessVolumeHUDProps) {
   const [isZero, setIsZero] = useState(level.value <= 0);
 
   useAnimatedReaction(
@@ -30,7 +47,7 @@ export function BrightnessVolumeHUD({ side, icon, zeroIcon, level, opacity }: Br
     []
   );
 
-  const containerStyle = useAnimatedStyle(() => ({
+  const boxStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
   }));
 
@@ -41,34 +58,38 @@ export function BrightnessVolumeHUD({ side, icon, zeroIcon, level, opacity }: Br
   const displayIcon = zeroIcon && isZero ? zeroIcon : icon;
 
   return (
-    <Animated.View
+    <View
       pointerEvents="none"
-      style={[styles.container, side === 'left' ? styles.left : styles.right, containerStyle]}>
-      <Ionicons name={displayIcon} size={20} color="#fff" style={styles.icon} />
-      <View style={styles.track}>
-        <Animated.View style={[styles.fill, fillStyle]} />
-      </View>
-    </Animated.View>
+      style={[styles.wrapper, side === 'left' ? styles.left : styles.right, { bottom: -bottomInset }]}>
+      <Animated.View style={[styles.box, boxStyle]}>
+        <Ionicons name={displayIcon} size={20} color="#fff" style={styles.icon} />
+        <View style={styles.track}>
+          <Animated.View style={[styles.fill, fillStyle]} />
+        </View>
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  wrapper: {
     position: 'absolute',
-    top: '50%',
-    marginTop: -70,
-    width: 44,
-    height: 140,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center',
-    paddingVertical: 10,
+    top: 0,
+    justifyContent: 'center',
   },
   left: {
     left: 24,
   },
   right: {
     right: 24,
+  },
+  box: {
+    width: 44,
+    height: 140,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    paddingVertical: 10,
   },
   icon: {
     marginBottom: 8,

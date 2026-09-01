@@ -15,7 +15,12 @@ import {
   Text,
   View,
 } from "react-native";
-import { useSharedValue } from "react-native-reanimated";
+import {
+  cancelAnimation,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
   AudioTrack,
@@ -35,6 +40,7 @@ import {
   VideoPlayer,
   type VideoZoomMode,
 } from "@/components/player/VideoPlayer";
+import { ZoomModeHUD } from "@/components/player/ZoomModeHUD";
 import { useImmersiveMode } from "@/hooks/useImmersiveMode";
 import { useOrientationLock } from "@/hooks/useOrientationLock";
 import { usePlaybackPreferences } from "@/hooks/usePlaybackPreferences";
@@ -50,6 +56,12 @@ import {
 
 const AUTO_HIDE_DELAY_MS = 3000;
 const ZOOM_CYCLE: VideoZoomMode[] = ["contain", "cover", "stretch"];
+const ZOOM_MODE_LABELS: Record<VideoZoomMode, string> = {
+  contain: "Fit",
+  cover: "Fill",
+  stretch: "Stretch",
+};
+const ZOOM_FLASH_VISIBLE_MS = 900;
 // Generously covers the SeekBar's touch area plus the time row beneath
 // it, so GestureLayer's full-screen zones don't compete with the seek bar's
 // own gesture for taps while the bottom bar is actually on screen. When the
@@ -167,9 +179,30 @@ export function PlayerScreen({
   // container, and also writes to it to stay in sync when zoomMode changes
   // some other way, e.g. handleZoomSnap below or the toolbar cycle button).
   const zoomProgress = useSharedValue(zoomMode === "cover" ? 1 : 0);
-  const handleZoomSnap = useCallback((mode: "contain" | "cover") => {
-    setZoomMode(mode);
-  }, []);
+  const zoomFlashOpacity = useSharedValue(0);
+  // Triggered explicitly from handleCycleZoomMode and handleZoomSnap below
+  // — not from a zoomMode-watching effect, since zoomMode also resets to
+  // "contain" on every video change (see the [id] effect further down),
+  // which isn't a user-triggered zoom change and shouldn't flash the mode
+  // name.
+  const flashZoomMode = useCallback(() => {
+    cancelAnimation(zoomFlashOpacity);
+    zoomFlashOpacity.value = withTiming(1, { duration: 120 }, (finished) => {
+      if (finished) {
+        zoomFlashOpacity.value = withDelay(
+          ZOOM_FLASH_VISIBLE_MS,
+          withTiming(0, { duration: 250 }),
+        );
+      }
+    });
+  }, [zoomFlashOpacity]);
+  const handleZoomSnap = useCallback(
+    (mode: "contain" | "cover") => {
+      setZoomMode(mode);
+      flashZoomMode();
+    },
+    [flashZoomMode],
+  );
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
@@ -298,6 +331,33 @@ export function PlayerScreen({
   useKeepAwake();
   useOrientationLock(orientationLock);
   useImmersiveMode(!controlsVisible);
+
+  // Android's STRETCH resize mode (ExoPlayer's RESIZE_MODE_FILL) has been
+  // reported to leave the video rendered at its pre-rotation size in the
+  // corner of the newly-rotated container instead of filling it, rather
+  // than picking up the new dimensions. "contain"/"cover" don't show this —
+  // their box is recomputed fresh in JS every render from
+  // screenWidth/screenHeight (see VideoPlayer's containerStyle) and handed
+  // to native as a plain COVER-fill, so they aren't relying on native's own
+  // resize recalculation the way stretch is. Forcing a fresh player
+  // instance is the most reliable fix found for this — a brief poster
+  // flash on rotation while in stretch mode, rather than a persistently
+  // broken frame.
+  const isFirstOrientationRef = useRef(true);
+  useEffect(() => {
+    if (isFirstOrientationRef.current) {
+      isFirstOrientationRef.current = false;
+      return;
+    }
+    if (zoomMode === "stretch" && video) {
+      savePosition(video.id, currentTimeRef.current, durationRef.current);
+      setReloadToken((t) => t + 1);
+    }
+    // Deliberately only orientationLock — this only cares whether stretch
+    // mode happens to be active at the moment orientation actually
+    // changes, not about re-running whenever zoomMode itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orientationLock]);
 
   const clearHideTimer = useCallback(() => {
     if (hideTimerRef.current) {
@@ -574,7 +634,8 @@ export function PlayerScreen({
     setZoomMode(
       (prev) => ZOOM_CYCLE[(ZOOM_CYCLE.indexOf(prev) + 1) % ZOOM_CYCLE.length],
     );
-  }, []);
+    flashZoomMode();
+  }, [flashZoomMode]);
 
   const handleSelectSubtitleFile = useCallback(async () => {
     if (!video) {
@@ -752,6 +813,10 @@ export function PlayerScreen({
             onPictureInPictureStatusChanged={handlePipStatusChanged}
             onRestoreUserInterfaceForPictureInPictureStop={handleRestoreFromPip}
           />
+
+          {pipActive ? null : (
+            <ZoomModeHUD opacity={zoomFlashOpacity} label={ZOOM_MODE_LABELS[zoomMode]} />
+          )}
 
           {pipActive ? null : (
             <SubtitleOverlay

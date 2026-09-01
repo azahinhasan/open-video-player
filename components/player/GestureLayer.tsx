@@ -360,6 +360,7 @@ export function GestureLayer({
           icon="sunny"
           level={brightnessLevel}
           opacity={brightnessOpacity}
+          bottomInset={bottomInset}
         />
         <BrightnessVolumeHUD
           side="right"
@@ -367,11 +368,13 @@ export function GestureLayer({
           zeroIcon="volume-mute"
           level={volumeLevel}
           opacity={volumeOpacity}
+          bottomInset={bottomInset}
         />
         <SeekPreviewHUD
           opacity={seekOpacity}
           targetSeconds={seekPreview.targetSeconds}
           deltaSeconds={seekPreview.deltaSeconds}
+          bottomInset={bottomInset}
         />
       </View>
     </GestureDetector>
@@ -387,9 +390,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   centerFlash: {
+    // bottom is applied inline (see the render above) — it depends on the
+    // runtime bottomInset prop, not a fixed value.
     position: 'absolute',
     top: 0,
-    bottom: 0,
     left: 0,
     right: 0,
     alignItems: 'center',

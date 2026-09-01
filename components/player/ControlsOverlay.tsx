@@ -171,7 +171,15 @@ export function ControlsOverlay({
         style={[
           styles.topBar,
           topBarStyle,
-          { paddingTop: insets.top + 6, paddingLeft: insets.left + 12, paddingRight: insets.right + 12 },
+          // Same reasoning as bottomBar's paddingHorizontal below: symmetric
+          // padding keeps the back button/title/menu row centered as a
+          // group even when insets.left and insets.right differ (a
+          // landscape-side notch/cutout), rather than shifting it toward
+          // whichever side has less inset.
+          {
+            paddingTop: insets.top + 6,
+            paddingHorizontal: Math.max(insets.left, insets.right) + 12,
+          },
         ]}
         pointerEvents="box-none">
         <Pressable style={styles.iconButton} onPress={onBack} hitSlop={12}>
@@ -204,8 +212,14 @@ export function ControlsOverlay({
             // under the transport row there — cap how much of insets.bottom
             // gets added on top of a smaller flat amount instead.
             paddingBottom: isLandscape ? Math.min(insets.bottom, 8) + 4 : insets.bottom + 14,
-            paddingLeft: insets.left,
-            paddingRight: insets.right,
+            // Symmetric, not insets.left/insets.right individually — on a
+            // device with a landscape-side notch/cutout, those two differ,
+            // and padding each side by its own inset shifts the seek bar/
+            // buttons/time row off-center (toward whichever side has less)
+            // instead of just leaving the notch itself uncovered. Using the
+            // larger of the two on both sides keeps content centered while
+            // still never rendering under the cutout.
+            paddingHorizontal: Math.max(insets.left, insets.right),
           },
         ]}
         pointerEvents="box-none">
