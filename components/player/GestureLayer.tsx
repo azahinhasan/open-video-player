@@ -6,7 +6,6 @@ import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   cancelAnimation,
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -22,11 +21,6 @@ const COMMIT_INTERVAL_MS = 70;
 const HUD_HIDE_DELAY_MS = 1000;
 const DOUBLE_TAP_MAX_DELAY_MS = 250;
 const SEEK_PIXELS_PER_SECOND = 8;
-// How much finger-distance change is needed for a full fit<->fill swing —
-// 1 means the fingers need to double their starting distance apart (scale
-// reaching 2.0) to go from fully "fit" to fully "fill", or halve it (scale
-// 0.5) to go the other way. A deliberately large gesture, not a hair-trigger.
-const PINCH_ZOOM_SENSITIVITY = 1;
 
 type GestureLayerProps = {
   currentTime: number;
@@ -46,18 +40,6 @@ type GestureLayerProps = {
   onTogglePlayPause: () => void;
   /** Called the instant a seek-drag begins, so the controls bar (progress bar, transport buttons) is already on screen for the whole drag — not just revealed reactively once the drag ends and onSeekTo commits. */
   onShowControls: () => void;
-  /**
-   * 0 (fit/letterboxed) to 1 (fill/cropped) — the pinch gesture below live-
-   * writes into this every frame while active, and VideoPlayer reads it to
-   * animate the video's container between those two shapes. Owned by the
-   * parent (not local state here) because VideoPlayer needs to both read it
-   * (to render) and write it (to stay in sync when the zoom mode changes
-   * some other way, e.g. the toolbar button) — same shared-SharedValue
-   * pattern as volumeLevel above.
-   */
-  zoomProgress: SharedValue<number>;
-  /** Fires once, when a pinch gesture ends and settles on an endpoint — lets the parent commit the corresponding real zoomMode ('contain' at 0, 'cover' at 1) so the toolbar's cycle button picks up from the right place afterward. */
-  onZoomSnap: (mode: "contain" | "cover") => void;
   /**
    * Height, in points, to leave uncovered at the bottom of the screen.
    * The SeekBar lives there and has its own GestureDetector — without
@@ -79,8 +61,6 @@ export function GestureLayer({
   onToggleControls,
   onTogglePlayPause,
   onShowControls,
-  zoomProgress,
-  onZoomSnap,
   bottomInset = 0,
 }: GestureLayerProps) {
   const { height } = useWindowDimensions();
@@ -182,12 +162,6 @@ export function GestureLayer({
 
   const brightnessPan = Gesture.Pan()
     .runOnJS(true)
-    // Without this, the pinch gesture's simultaneousWithExternalGesture
-    // (needed so pinch can activate at all — see pinchGesture below) also
-    // lets a second finger landing in this zone activate brightnessPan
-    // alongside the pinch, nudging brightness while zooming. maxPointers(1)
-    // makes this fail to activate the moment a second finger is down.
-    .maxPointers(1)
     .activeOffsetY([-8, 8])
     .failOffsetX([-24, 24])
     .onStart(() => {
@@ -211,8 +185,6 @@ export function GestureLayer({
 
   const volumePan = Gesture.Pan()
     .runOnJS(true)
-    // See brightnessPan's comment above — same reasoning, same fix.
-    .maxPointers(1)
     .activeOffsetY([-8, 8])
     .failOffsetX([-24, 24])
     .onStart(() => {
@@ -236,10 +208,6 @@ export function GestureLayer({
   const createSeekPan = () =>
     Gesture.Pan()
       .runOnJS(true)
-      // See brightnessPan's comment above — same reasoning: without this, a
-      // pinch's second finger landing in this zone could also activate a
-      // seek-by-swipe alongside the pinch.
-      .maxPointers(1)
       .activeOffsetX([-10, 10])
       .failOffsetY([-24, 24])
       .onStart(() => {
@@ -314,116 +282,65 @@ export function GestureLayer({
     Gesture.Exclusive(rightDoubleTap, singleTap),
   );
 
-  // Pinch requires two simultaneous touch points, which single-finger
-  // gestures (the pans/taps above) never reach — attached as its own
-  // top-level detector (see the wrapping GestureDetector below) rather than
-  // folded into leftZoneGesture/rightZoneGesture, both so it can span both
-  // zones at once (a pinch naturally has one finger in each) and so it
-  // can't disturb those already-tuned single-finger Race/Exclusive trees.
-  // simultaneousWithExternalGesture is required, not optional: nested
-  // GestureDetectors don't cooperate by default in RNGH — without this, the
-  // inner zone gestures silently claim the touches first and the pinch
-  // never gets a chance to activate at all.
-  const pinchStartProgress = useSharedValue(0);
-  const pinchGesture = Gesture.Pinch()
-    // leftZoneGesture/rightZoneGesture are ComposedGesture (Gesture.Race),
-    // which simultaneousWithExternalGesture doesn't accept directly —
-    // toGestureArray() flattens a composition down to its underlying raw
-    // gestures, which it does accept.
-    .simultaneousWithExternalGesture(
-      ...leftZoneGesture.toGestureArray(),
-      ...rightZoneGesture.toGestureArray(),
-    )
-    // maxPointers(1) on the pans (above) stops them from activating once a
-    // second finger is already down, but doesn't retroactively cancel one
-    // that activated from just the FIRST finger, a moment before the
-    // second one registers — which a pinch's natural spreading motion can
-    // easily satisfy (especially leftSeekPan/rightSeekPan's horizontal
-    // threshold, since spreading fingers apart is itself a mostly-
-    // horizontal motion). blocksExternalGesture makes each of these
-    // explicitly wait for the pinch to fail (i.e. confirm it's NOT a
-    // 2-finger gesture) before they're allowed to activate at all, closing
-    // that gap. Reversed relation of requireExternalGestureToFail — one
-    // call here instead of one on each of the four gestures.
-    .blocksExternalGesture(brightnessPan, volumePan, leftSeekPan, rightSeekPan)
-    .onStart(() => {
-      pinchStartProgress.value = zoomProgress.value;
-    })
-    .onUpdate((event) => {
-      const next =
-        pinchStartProgress.value + (event.scale - 1) / PINCH_ZOOM_SENSITIVITY;
-      zoomProgress.value = Math.min(1, Math.max(0, next));
-    })
-    .onEnd((_event, success) => {
-      if (!success) {
-        return;
-      }
-      const snapped = zoomProgress.value > 0.5 ? 1 : 0;
-      zoomProgress.value = withTiming(snapped, { duration: 220 });
-      runOnJS(onZoomSnap)(snapped === 1 ? "cover" : "contain");
-    });
-
   const playPauseFlashStyle = useAnimatedStyle(() => ({
     opacity: playPauseFlashOpacity.value,
   }));
 
   return (
-    <GestureDetector gesture={pinchGesture}>
-      <View
-        style={[styles.root, { bottom: bottomInset }]}
-        pointerEvents="box-none"
+    <View
+      style={[styles.root, { bottom: bottomInset }]}
+      pointerEvents="box-none"
+    >
+      <GestureDetector gesture={leftZoneGesture}>
+        <View style={styles.zone} />
+      </GestureDetector>
+      <GestureDetector gesture={rightZoneGesture}>
+        <View style={styles.zone} />
+      </GestureDetector>
+
+      {/* Dead center of the true full screen regardless of which zone was
+          double-tapped, regardless of orientation, AND regardless of
+          whether the controls bar is showing — bottom: -bottomInset
+          deliberately reaches back past root's own bottom edge (root is
+          shortened by bottomInset above, to keep its touch zones off the
+          seek bar), so this doesn't end up centered in that shortened
+          box and sit visibly above true center whenever controls are
+          visible. */}
+      <Animated.View
+        style={[
+          styles.centerFlash,
+          { bottom: -bottomInset },
+          playPauseFlashStyle,
+        ]}
+        pointerEvents="none"
       >
-        <GestureDetector gesture={leftZoneGesture}>
-          <View style={styles.zone} />
-        </GestureDetector>
-        <GestureDetector gesture={rightZoneGesture}>
-          <View style={styles.zone} />
-        </GestureDetector>
+        <View style={styles.centerFlashIcon}>
+          <Ionicons name={paused ? "play" : "pause"} size={36} color="#fff" />
+        </View>
+      </Animated.View>
 
-        {/* Dead center of the true full screen regardless of which zone was
-            double-tapped, regardless of orientation, AND regardless of
-            whether the controls bar is showing — bottom: -bottomInset
-            deliberately reaches back past root's own bottom edge (root is
-            shortened by bottomInset above, to keep its touch zones off the
-            seek bar), so this doesn't end up centered in that shortened
-            box and sit visibly above true center whenever controls are
-            visible. */}
-        <Animated.View
-          style={[
-            styles.centerFlash,
-            { bottom: -bottomInset },
-            playPauseFlashStyle,
-          ]}
-          pointerEvents="none"
-        >
-          <View style={styles.centerFlashIcon}>
-            <Ionicons name={paused ? "play" : "pause"} size={36} color="#fff" />
-          </View>
-        </Animated.View>
-
-        <BrightnessVolumeHUD
-          side="left"
-          icon="sunny"
-          level={brightnessLevel}
-          opacity={brightnessOpacity}
-          bottomInset={bottomInset}
-        />
-        <BrightnessVolumeHUD
-          side="right"
-          icon="volume-high"
-          zeroIcon="volume-mute"
-          level={volumeLevel}
-          opacity={volumeOpacity}
-          bottomInset={bottomInset}
-        />
-        <SeekPreviewHUD
-          opacity={seekOpacity}
-          targetSeconds={seekPreview.targetSeconds}
-          deltaSeconds={seekPreview.deltaSeconds}
-          bottomInset={bottomInset}
-        />
-      </View>
-    </GestureDetector>
+      <BrightnessVolumeHUD
+        side="left"
+        icon="sunny"
+        level={brightnessLevel}
+        opacity={brightnessOpacity}
+        bottomInset={bottomInset}
+      />
+      <BrightnessVolumeHUD
+        side="right"
+        icon="volume-high"
+        zeroIcon="volume-mute"
+        level={volumeLevel}
+        opacity={volumeOpacity}
+        bottomInset={bottomInset}
+      />
+      <SeekPreviewHUD
+        opacity={seekOpacity}
+        targetSeconds={seekPreview.targetSeconds}
+        deltaSeconds={seekPreview.deltaSeconds}
+        bottomInset={bottomInset}
+      />
+    </View>
   );
 }
 

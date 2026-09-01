@@ -189,17 +189,16 @@ export function PlayerScreen({
   const [rate, setRate] = useState(1);
   const [loop, setLoop] = useState(false);
   const [zoomMode, setZoomMode] = useState<VideoZoomMode>("contain");
-  // 0 (fit) to 1 (fill) — shared with GestureLayer (which live-writes to it
-  // during a pinch) and VideoPlayer (which reads it to animate the video's
-  // container, and also writes to it to stay in sync when zoomMode changes
-  // some other way, e.g. handleZoomSnap below or the toolbar cycle button).
+  // 0 (fit) to 1 (fill) — read by VideoPlayer to animate the video's
+  // container, and written by VideoPlayer itself to stay in sync whenever
+  // zoomMode changes (only ever via the toolbar cycle button now — see
+  // handleCycleZoomMode below; pinch-to-zoom was removed entirely).
   const zoomProgress = useSharedValue(zoomMode === "cover" ? 1 : 0);
   const zoomFlashOpacity = useSharedValue(0);
-  // Triggered explicitly from handleCycleZoomMode and handleZoomSnap below
-  // — not from a zoomMode-watching effect, since zoomMode also resets to
-  // "contain" on every video change (see the [id] effect further down),
-  // which isn't a user-triggered zoom change and shouldn't flash the mode
-  // name.
+  // Triggered explicitly from handleCycleZoomMode below — not from a
+  // zoomMode-watching effect, since zoomMode also resets to "contain" on
+  // every video change (see the [id] effect further down), which isn't a
+  // user-triggered zoom change and shouldn't flash the mode name.
   const flashZoomMode = useCallback(() => {
     cancelAnimation(zoomFlashOpacity);
     zoomFlashOpacity.value = withTiming(1, { duration: 120 }, (finished) => {
@@ -211,13 +210,6 @@ export function PlayerScreen({
       }
     });
   }, [zoomFlashOpacity]);
-  const handleZoomSnap = useCallback(
-    (mode: "contain" | "cover") => {
-      setZoomMode(mode);
-      flashZoomMode();
-    },
-    [flashZoomMode],
-  );
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
@@ -886,8 +878,6 @@ export function PlayerScreen({
                 }}
                 onToggleControls={toggleControls}
                 onShowControls={showControls}
-                zoomProgress={zoomProgress}
-                onZoomSnap={handleZoomSnap}
                 bottomInset={controlsVisible ? bottomControlsTouchHeight : 0}
               />
 
@@ -907,6 +897,7 @@ export function PlayerScreen({
                 onRateChange={setRate}
                 loop={loop}
                 onToggleLoop={() => setLoop((v) => !v)}
+                zoomMode={zoomMode}
                 onCycleZoomMode={handleCycleZoomMode}
                 hasSubtitle={subtitleCues.length > 0}
                 subtitlesEnabled={subtitlesEnabled}

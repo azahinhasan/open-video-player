@@ -91,10 +91,10 @@ type VideoPlayerProps = {
   zoomMode?: VideoZoomMode;
   /**
    * 0 (fit/letterboxed) to 1 (fill/cropped) — drives the container's
-   * animated size between the "contain" and "cover" shapes, live during a
-   * pinch gesture (see GestureLayer) and smoothly on any other zoomMode
-   * change too (see the sync effect below). Owned by PlayerScreen and
-   * shared with GestureLayer, which writes to it directly during a pinch.
+   * animated size between the "contain" and "cover" shapes, smoothly
+   * animating whenever zoomMode changes (see the sync effect below).
+   * Owned by PlayerScreen; zoomMode only ever changes via the toolbar's
+   * cycle button, this just gives that switch a smooth transition.
    */
   zoomProgress: SharedValue<number>;
   /**
@@ -316,12 +316,9 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
       });
     }, [markPictureReady, zoomMode, naturalSize]);
 
-    // Keeps zoomProgress in sync whenever zoomMode changes some way other
-    // than the pinch gesture itself (the toolbar's cycle button, or a fresh
-    // mount) — animated so that path also transitions smoothly rather than
-    // snapping instantly, not just the live pinch-driven case. A pinch
-    // ending on the matching value makes this a harmless no-op redundant
-    // animation-to-the-same-value, not a conflicting second transition.
+    // Keeps zoomProgress in sync whenever zoomMode changes (the toolbar's
+    // cycle button, or a fresh mount) — animated so the switch transitions
+    // smoothly rather than snapping instantly.
     useEffect(() => {
       if (zoomMode === "cover") {
         zoomProgress.value = withTiming(1, { duration: 250 });
@@ -337,8 +334,8 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
     // the actual screen size. When naturalSize is already known on the
     // first render (the common case now), progress 0 is correct
     // immediately and the container never resizes after mount on its own —
-    // it only ever moves via zoomProgress, live during a pinch or animated
-    // on a mode change (see above).
+    // it only ever moves via zoomProgress, animated on a mode change (see
+    // above).
     const containerStyle = useAnimatedStyle(() => {
       if (zoomMode === "stretch" || !naturalSize || !screenWidth || !screenHeight) {
         return StyleSheet.absoluteFillObject;
@@ -365,10 +362,10 @@ export const VideoPlayer = forwardRef<VideoRef, VideoPlayerProps>(
     // video just needs to fill it exactly — COVER does that with no
     // cropping (the box's aspect ratio already matches whatever the
     // container's current interpolated shape is), and critically involves
-    // no letterbox transform for native to compute asynchronously at any
-    // point during a live pinch. Only "stretch" (which isn't part of the
-    // pinch/contain/cover interpolation at all) or naturalSize not yet
-    // being known falls back to the real resizeMode.
+    // no letterbox transform for native to compute asynchronously mid-
+    // transition. Only "stretch" (which isn't part of the contain/cover
+    // interpolation at all) or naturalSize not yet being known falls back
+    // to the real resizeMode.
     const effectiveResizeMode =
       zoomMode !== "stretch" && naturalSize
         ? ResizeMode.COVER

@@ -13,9 +13,22 @@ import type { AudioTrack } from "react-native-video";
 import { MoreOptionsMenu } from "@/components/player/MoreOptionsMenu";
 import { MuteButton } from "@/components/player/MuteButton";
 import { SeekBar } from "@/components/player/SeekBar";
+import type { VideoZoomMode } from "@/components/player/VideoPlayer";
 import { usePlaybackPreferences } from "@/hooks/usePlaybackPreferences";
 import { useAccentColor } from "@/hooks/useThemePreference";
 import { formatTime } from "@/utils/formatTime";
+
+// One icon per zoom mode, shown on the cycle button in place of the mode it
+// will switch TO if pressed again — so the button always reflects the mode
+// currently active, not a generic static glyph.
+const ZOOM_MODE_ICONS: Record<
+  VideoZoomMode,
+  keyof typeof Ionicons.glyphMap
+> = {
+  contain: "contract-outline",
+  cover: "expand-outline",
+  stretch: "resize-outline",
+};
 
 type ControlsOverlayProps = {
   visible: boolean;
@@ -33,6 +46,7 @@ type ControlsOverlayProps = {
   onRateChange: (rate: number) => void;
   loop: boolean;
   onToggleLoop: () => void;
+  zoomMode: VideoZoomMode;
   onCycleZoomMode: () => void;
   hasSubtitle: boolean;
   subtitlesEnabled: boolean;
@@ -75,6 +89,7 @@ export function ControlsOverlay({
   onRateChange,
   loop,
   onToggleLoop,
+  zoomMode,
   onCycleZoomMode,
   hasSubtitle,
   subtitlesEnabled,
@@ -295,7 +310,7 @@ export function ControlsOverlay({
             onPress={onCycleZoomMode}
             hitSlop={12}
           >
-            <Ionicons name="scan-outline" size={20} color="#fff" />
+            <Ionicons name={ZOOM_MODE_ICONS[zoomMode]} size={20} color="#fff" />
           </Pressable>
           <Pressable
             style={styles.orientationButton}
