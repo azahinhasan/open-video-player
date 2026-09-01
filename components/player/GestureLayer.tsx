@@ -182,6 +182,12 @@ export function GestureLayer({
 
   const brightnessPan = Gesture.Pan()
     .runOnJS(true)
+    // Without this, the pinch gesture's simultaneousWithExternalGesture
+    // (needed so pinch can activate at all — see pinchGesture below) also
+    // lets a second finger landing in this zone activate brightnessPan
+    // alongside the pinch, nudging brightness while zooming. maxPointers(1)
+    // makes this fail to activate the moment a second finger is down.
+    .maxPointers(1)
     .activeOffsetY([-8, 8])
     .failOffsetX([-24, 24])
     .onStart(() => {
@@ -205,6 +211,8 @@ export function GestureLayer({
 
   const volumePan = Gesture.Pan()
     .runOnJS(true)
+    // See brightnessPan's comment above — same reasoning, same fix.
+    .maxPointers(1)
     .activeOffsetY([-8, 8])
     .failOffsetX([-24, 24])
     .onStart(() => {
@@ -228,6 +236,10 @@ export function GestureLayer({
   const createSeekPan = () =>
     Gesture.Pan()
       .runOnJS(true)
+      // See brightnessPan's comment above — same reasoning: without this, a
+      // pinch's second finger landing in this zone could also activate a
+      // seek-by-swipe alongside the pinch.
+      .maxPointers(1)
       .activeOffsetX([-10, 10])
       .failOffsetY([-24, 24])
       .onStart(() => {
