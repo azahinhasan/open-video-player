@@ -216,7 +216,7 @@ export function ControlsOverlay({
           // reach the app, making the three-dot menu (and back button)
           // untappable. insets.top must always be respected in full.
           {
-            paddingTop: isLandscape ? Math.min(insets.top, 20) : insets.top + 6,
+            paddingTop: isLandscape ? Math.min(insets.top, 20) : insets.top + 2,
             paddingHorizontal: Math.max(insets.left, insets.right) + 12,
           },
         ]}
@@ -392,13 +392,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginTop: 10,
-    marginBottom: -10,
+    marginBottom: 0,
   },
   bottomBar: {
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: -5,
+    bottom: 0,
     paddingTop: 6,
     backgroundColor: "rgba(0, 0, 0, 0.07)",
   },

@@ -334,6 +334,18 @@ export function GestureLayer({
       ...leftZoneGesture.toGestureArray(),
       ...rightZoneGesture.toGestureArray(),
     )
+    // maxPointers(1) on the pans (above) stops them from activating once a
+    // second finger is already down, but doesn't retroactively cancel one
+    // that activated from just the FIRST finger, a moment before the
+    // second one registers — which a pinch's natural spreading motion can
+    // easily satisfy (especially leftSeekPan/rightSeekPan's horizontal
+    // threshold, since spreading fingers apart is itself a mostly-
+    // horizontal motion). blocksExternalGesture makes each of these
+    // explicitly wait for the pinch to fail (i.e. confirm it's NOT a
+    // 2-finger gesture) before they're allowed to activate at all, closing
+    // that gap. Reversed relation of requireExternalGestureToFail — one
+    // call here instead of one on each of the four gestures.
+    .blocksExternalGesture(brightnessPan, volumePan, leftSeekPan, rightSeekPan)
     .onStart(() => {
       pinchStartProgress.value = zoomProgress.value;
     })

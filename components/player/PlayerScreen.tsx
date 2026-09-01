@@ -13,6 +13,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import {
@@ -170,6 +171,20 @@ export function PlayerScreen({
   const [orientationLock, setOrientationLock] = useState(
     resolveDefaultOrientationLock,
   );
+  // Derived from the LIVE screen size, not orientationLock — orientationLock
+  // flips the instant the rotate button is pressed (it's what drives
+  // useOrientationLock's lockAsync call below), well before the physical
+  // rotation actually finishes. ControlsOverlay's padding is computed from
+  // insets, which only update once the real rotation completes — so if its
+  // isLandscape prop flipped on that same earlier button-press timing, the
+  // padding briefly used the NEW isLandscape against the OLD insets (a
+  // mismatched, wrong-looking value) before settling once insets caught up:
+  // a visible double-step "jump early, then jump again" instead of one
+  // smooth change. useWindowDimensions updates on the same native-rotation
+  // timing insets do, so deriving isLandscape from it instead keeps the two
+  // always in sync.
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isLandscape = windowWidth > windowHeight;
   const [locked, setLocked] = useState(false);
   const [rate, setRate] = useState(1);
   const [loop, setLoop] = useState(false);
@@ -885,10 +900,7 @@ export function PlayerScreen({
                 buffering={buffering}
                 hasNext={hasNext}
                 hasPrevious={hasPrevious}
-                isLandscape={
-                  orientationLock ===
-                  ScreenOrientation.OrientationLock.LANDSCAPE
-                }
+                isLandscape={isLandscape}
                 videoUri={video.uri}
                 videoId={video.id}
                 rate={rate}
