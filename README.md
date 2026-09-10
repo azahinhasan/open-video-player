@@ -29,10 +29,6 @@ To build a release APK locally:
 npm run build:local
 ```
 
-## Changelog
-
-See [CHANGELOG.md](./CHANGELOG.md) for release notes.
-
 ## License
 
 MIT — see [LICENSE](./LICENSE).
