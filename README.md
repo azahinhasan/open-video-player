@@ -2,7 +2,7 @@
 
 A local video player for Android built with Expo and React Native. Point it at your device's storage and it plays what's there — no accounts, no streaming, no internet required.
 
-**[⬇️ Download the latest release](https://github.com/azahinhasan/video-player-mobile/releases/latest)**
+[![Download Latest Release](https://img.shields.io/github/v/release/azahinhasan/video-player-mobile?label=Download&style=for-the-badge&color=2081ED)](https://github.com/azahinhasan/video-player-mobile/releases/latest)
 
 ## Features
 
