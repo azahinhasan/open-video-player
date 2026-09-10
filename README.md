@@ -2,7 +2,7 @@
 
 An open-source video player for Android. It plays videos straight from your device's storage — no accounts, no ads, no internet required — and the source is here for anyone to use, modify, or contribute to.
 
-[![Download Latest Release](https://img.shields.io/github/v/release/azahinhasan/video-player-mobile?label=Download&style=for-the-badge&color=2081ED)](https://github.com/azahinhasan/video-player-mobile/releases/latest)
+[![Download Latest Release](https://img.shields.io/github/v/release/azahinhasan/open-video-player?label=Download&style=for-the-badge&color=2081ED)](https://github.com/azahinhasan/open-video-player/releases/latest)
 
 ## Features
 
